@@ -1,6 +1,6 @@
-﻿{
+{
     "name":  "csvpilot",
-    "version":  "1.0.1",
+    "version":  "1.0.2",
     "description":  "CLI tool to batch-process large CSV datasets using the GitHub Copilot SDK with a unified prompt template",
     "main":  "dist/csvpilot.bundle.js",
     "bin":  {
@@ -30,7 +30,7 @@
                        "type":  "git",
                        "url":  "git+https://github.com/nojaja/CsvPilot.git"
                    },
-    "author":  "nojaja \u003cfree.riccia@gmail.com\u003e (https://github.com/nojaja)",
+    "author":  "nojaja <free.riccia@gmail.com> (https://github.com/nojaja)",
     "license":  "Apache 2.0 License",
     "bugs":  {
                  "url":  "https://github.com/nojaja/CsvPilot/issues"

@@ -111,13 +111,13 @@ jobs:
           echo "✅ タグ $TAG_NAME を作成しました"
 
   # ----------------------------------------------------------
-  # 3. Node.js マトリクステスト (18.x / 20.x) — npm 公開前の品質ゲート
+  # 3. Node.js マトリクステスト (22.x) — npm 公開前の品質ゲート
   # ----------------------------------------------------------
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        node-version: [22.x]
     steps:
       - uses: actions/checkout@v4
 
