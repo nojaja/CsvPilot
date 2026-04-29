@@ -1,163 +1,208 @@
-# CsvPilot
+﻿# CsvPilot
 
-GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI アプリケーション。
-prompt ファイル（Handlebars テンプレート）を用いて各レコードを LLM に送信し、
-Copilot の応答を入力列に付与した CSV として出力します。
+A CLI tool that processes CSV files row-by-row using the GitHub Copilot SDK. It sends each record to an LLM via Handlebars-based prompt templates and appends the Copilot response as a new column in the output CSV.
 
-## 目次
-
-- **Project Overview**
-- **Project Structure**
-- **Technology Stack**
-- **Features**
-- **CLI Usage**
-- **Authentication**
-- **Sample**
-- **Development**
-- **Testing**
-- **Troubleshooting**
-- **License & Author**
-
-## Project Overview
-
-CsvPilot は大量の CSV レコードに対し、定義したテンプレートを使って自動的に LLM（GitHub Copilot SDK）に問い合わせを行い、応答を CSV に追記するためのツールです。
-用途例：感情分析、分類、要約、翻訳、品質チェックなど。
-
-## Project Structure
-
-- [src/cli.ts](src/cli.ts) — Commander による CLI エントリ、オプションパース
-- [src/orchestrator.ts](src/orchestrator.ts) — 全体のオーケストレーション（CSV×prompt の組み合わせ処理）
-- [src/sessionManager.ts](src/sessionManager.ts) — Copilot SDK クライアント / セッション管理
-- [src/fileResolver.ts](src/fileResolver.ts) — ファイル / フォルダ解決（再帰探索）
-- [src/promptLoader.ts](src/promptLoader.ts) — prompt.md 読み込み・分類
-- [src/templateRenderer.ts](src/templateRenderer.ts) — Handlebars テンプレートの展開
-- [src/csvProcessor.ts](src/csvProcessor.ts) — CSV のストリーミング読み込み / RBQL 適用
-- [src/outputWriter.ts](src/outputWriter.ts) — CSV ストリーミング出力（_copilot_response 列追加）
-- [sample/](sample/) — サンプル CSV と prompt（開発用）
-
-## Technology Stack
-
-- Node.js + TypeScript
-- GitHub Copilot SDK (`@github/copilot-sdk`)
-- Commander (`commander`) — CLI
-- Handlebars (`handlebars`) — レコードテンプレート
-- csv-parse / csv-stringify — 入出力ストリーミング
-- rbql — SQLライクなフィルタリング
-- webpack + ts-loader — 単一バンドル生成
-- jest / jest-runner-cli — ユニット / E2E テスト
-- ESLint / sonarjs, dependency-cruiser — 品質検証
-
-## Features
-
-- Handlebars ベースの `*.record.prompt.md` テンプレートで各レコードを展開
-- `*.session.prompt.md` を system message（全レコード共通）として使用
-- RBQL による柔軟な行絞り込み（クエリ指定時はメモリ内で評価）
-- `whole` / `record` モードによるセッション管理（会話履歴の保持/分離）
-- 出力は入力列に `_copilot_response` 列を追加した CSV
-
-## CLI Usage
-
-基本的な実行手順（ビルド後のバンドルを実行）:
-
-```bash
-npm install
-npm run build
-node dist/csvpilot.bundle.js \
-	-p sample/prompt \
-	-i sample/csv/reviews.csv \
-	-o sample/output
-```
-
-主要オプション:
-
-- `-p, --prompts <paths...>` — prompt.md ファイルまたはフォルダ（必須）
-- `-i, --input <paths...>` — CSV ファイルまたはフォルダ（必須）
-- `-q, --query <query>` — RBQL クエリ文字列（任意）
-- `-o, --output <dir>` — 出力先フォルダ（必須）
-- `-m, --mode <mode>` — `whole` | `record`（デフォルト: `whole`）
-- `--token <token>` — GitHub 認証トークン（省略可）
-- `--model <model>` — 使用モデル名（SDK デフォルトを使用する場合は省略）
-- `--delimiter <char>` — CSV 区切り文字（デフォルト: `,`）
-
-実行例（トークンを直接渡す）:
-
-```bash
-node dist/csvpilot.bundle.js -p sample/prompt -i sample/csv/reviews.csv -o sample/output --token gho_xxx
-```
-
-出力ファイル命名: `<outputDir>/{csv_basename}__{record_prompt_basename}.csv`。
-
-## Authentication
-
-認証の取り扱いは Copilot SDK のドキュメントに準拠しています。現在の実装は次の通りです:
-
-1. `--token` オプションが指定されている場合、または環境変数にトークンが設定されている場合は **OAuth GitHub App モード** として扱います（`gitHubToken` を SDK に渡し、`useLoggedInUser: false` を設定します）。
-
-2. `--token` も環境変数も未設定の場合は **GitHub サインイン済みユーザー** として扱い、SDK による対話的サインインまたは保存済み CLI 認証情報を利用します。
-
-優先順位（トークン解決）:
-
-- `--token` オプション
-- 環境変数 `COPILOT_GITHUB_TOKEN`
-- 環境変数 `GH_TOKEN`
-- 環境変数 `GITHUB_TOKEN`
-
-（詳細）公式ドキュメント: https://github.com/github/copilot-sdk/blob/main/docs/auth/index.md
-
-## Sample
-
-サンプルフォルダを同梱しています:
-
-- `sample/csv/reviews.csv` — テスト用レビュー CSV
-- `sample/prompt/system.session.prompt.md` — セッション共通の system メッセージ
-- `sample/prompt/sentiment.record.prompt.md` — レコード毎テンプレート
-
-実行例（サンプル）:
-
-```bash
-npm run build
-node dist/csvpilot.bundle.js -p sample/prompt -i sample/csv/reviews.csv -o sample/output
-```
-
-出力例: `sample/output/reviews__sentiment.record.prompt.csv` のようなファイルが生成されます。
-
-## Development
-
-セットアップ:
-
-```bash
-git clone <repo>
-npm install
-```
-
-主要な開発スクリプト:
-
-- `npm run build` — webpack でバンドル生成
-- `npm test` — 単体テスト
-- `npm run test:e2e` — E2E（jest-runner-cli）
-- `npm run lint` — ESLint
-- `npm run depcruise` — 依存関係解析（循環検出）
-- `npm run type-check` — TypeScript 型チェック（`tsc --noEmit`）
-
-## Testing
-
-このリポジトリにはユニットテストと E2E テストが含まれます。ワークスペースで実行した結果（ローカル確認）:
-
-- ユニットテスト: 32 tests (5 suites) — パス
-- E2E テスト: 5 tests — パス
-
-## Troubleshooting
-
-- PowerShell の表示で日本語が文字化けする場合は、コンソールの文字コードやフォント設定を確認してください。
-- `--token` または環境変数が未設定のときは、対話的に GitHub にサインインする必要があります。ヘッドレス / CI での自動実行には環境変数でのトークン指定を推奨します。
-- Webpack ビルド時に Handlebars の `require.extensions` に関する警告が出ますが、現状はビルド警告でありバンドル自体は生成されます。
-
-## License & Author
-
-License: Apache License 2.0
-
-Author: (package.json に未設定)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18.x-green.svg)](https://nodejs.org)
 
 ---
 
-生成日: 2026-04-29
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Examples](#examples)
+- [Contributing](#contributing)
+- [Support](#support)
+- [License](#license)
+
+---
+
+## Features
+
+- **Handlebars templates** — Define per-record prompts with `*.record.prompt.md` and a shared system message with `*.session.prompt.md`
+- **RBQL filtering** — Apply SQL-like row filtering before sending records to the LLM
+- **Session modes** — `whole` mode retains conversation history across records; `record` mode processes each row independently
+- **Streaming I/O** — Reads and writes CSV as a stream for low memory usage
+- **Single-file bundle** — Distributed as a pre-built webpack bundle; no compilation required after install
+
+---
+
+## Installation
+
+### Global install via npm
+
+```bash
+npm install -g csvpilot
+```
+
+### Run without installing (npx)
+
+```bash
+npx csvpilot -p <prompt-dir> -i <csv-file> -o <output-dir>
+```
+
+### From source
+
+```bash
+git clone https://github.com/TODO/csvpilot.git
+cd csvpilot
+npm install
+npm run build
+node dist/csvpilot.bundle.js --help
+```
+
+---
+
+## Usage
+
+```
+csvpilot [options]
+
+Required:
+  -p, --prompts <paths...>   Prompt .md file(s) or folder(s)
+  -i, --input  <paths...>    Input CSV file(s) or folder(s)
+  -o, --output <dir>         Output directory
+
+Optional:
+  -q, --query    <query>     RBQL query string for row filtering
+  -m, --mode     <mode>      Session mode: whole | record  (default: whole)
+  --token        <token>     GitHub auth token (overrides GITHUB_TOKEN env var)
+  --model        <model>     Model name (uses SDK default when omitted)
+  --delimiter    <char>      CSV delimiter character (default: ,)
+  -V, --version              Output the version number
+  -h, --help                 Display help
+```
+
+### Authentication
+
+If you are already signed in via GitHub Copilot CLI (`gh copilot`), no additional token configuration is required. The Copilot SDK will automatically pick up your credentials.
+
+If you are not authenticated, or want to use a specific token, provide it via one of the following:
+
+1. Environment variable (recommended):
+   ```bash
+   export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+   ```
+2. CLI option:
+   ```bash
+   csvpilot --token ghp_xxxxxxxxxxxx ...
+   ```
+
+---
+
+## Configuration
+
+### Prompt files
+
+Place two types of Markdown files in your prompt directory:
+
+| File pattern | Role |
+|---|---|
+| `*.record.prompt.md` | Per-record prompt. Handlebars variables map to CSV column names plus `{{NR}}` (row number). |
+| `*.session.prompt.md` | System message shared across all records in a session. |
+
+### Session modes
+
+| Mode | Behaviour |
+|---|---|
+| `whole` (default) | All records share a single conversation session (history is preserved). |
+| `record` | Each record starts a fresh session (no shared context). |
+
+---
+
+## Examples
+
+### Sentiment analysis on product reviews
+
+**Directory layout:**
+
+```
+sample/
+  csv/
+    reviews.csv
+  prompt/
+    system.session.prompt.md
+    sentiment.record.prompt.md
+  output/
+```
+
+**`system.session.prompt.md`**
+
+```
+You are a sentiment analysis assistant for product reviews.
+Choose one label: Positive / Negative / Neutral.
+Keep answers concise (1-2 sentences).
+```
+
+**`sentiment.record.prompt.md`**
+
+```
+Record: {{NR}}
+Product: {{product}}
+Score: {{score}} / 5
+Comment: {{comment}}
+
+Analyse the sentiment and respond in the format:
+"Sentiment label: <label>. <one-sentence reason>"
+```
+
+**Run:**
+
+```bash
+csvpilot \
+  -p sample/prompt \
+  -i sample/csv/reviews.csv \
+  -o sample/output
+```
+
+**Output** (`reviews__sentiment.csv`):
+
+```
+id,product,reviewer,score,comment,_copilot_response
+1,Smartphone X,Taro,4,Fast but short battery life,"Sentiment label: Positive. ..."
+```
+
+### Filter rows with RBQL before processing
+
+```bash
+csvpilot \
+  -p sample/prompt \
+  -i sample/csv/reviews.csv \
+  -o sample/output \
+  -q "select * where a.score >= 4"
+```
+
+---
+
+## Contributing
+
+Contributions are welcome!
+
+1. Fork the repository and create a feature branch.
+2. Make your changes following the existing code style (TypeScript + ESLint).
+3. Run tests before opening a pull request:
+   ```bash
+   npm test          # unit tests
+   npm run test:e2e  # end-to-end tests
+   ```
+4. Open a pull request against the `main` branch with a clear description.
+
+For significant changes, please open an issue first to discuss the approach.
+
+---
+
+## Support
+
+- **Issues / Bug reports**: [GitHub Issues](https://github.com/TODO/csvpilot/issues)
+- **Documentation**: See [`docs/spec/`](docs/spec/) for detailed specifications.
+
+> TODO: Update the GitHub repository URL above.
+
+---
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
