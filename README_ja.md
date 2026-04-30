@@ -1,6 +1,6 @@
 ﻿# CsvPilot
 
-GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI ツールです。Handlebars ベースのプロンプトテンプレートを使って各レコードを LLM に送信し、Copilot の応答を新しい列として出力 CSV に追記します。
+GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI ツールです。Handlebars ベースのプロンプトテンプレートを使って各レコードを LLM に送信し、Copilot の JSON 応答から宣言されたフィールドを個別の CSV 列として出力します。
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.x-green.svg)](https://nodejs.org)
@@ -23,6 +23,7 @@ GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI �
 ## 機能
 
 - **Handlebars テンプレート** — `*.record.prompt.md` でレコードごとのプロンプトを定義し、`*.session.prompt.md` でセッション共通のシステムメッセージを定義
+- **スキーマ駆動のマルチカラム出力** — `*.record.prompt.md` のフロントマターに出力カラムを宣言。Copilot は JSON で応答し、各フィールドが独立した CSV 列として書き出される
 - **RBQL フィルタリング** — LLM に送信する前に SQL ライクなクエリで行を絞り込み可能
 - **セッションモード** — `whole` モードはレコード間で会話履歴を保持、`record` モードはレコードごとに独立したセッションを使用
 - **ストリーミング I/O** — CSV をストリームとして読み書きするため低メモリで動作
@@ -102,8 +103,31 @@ GitHub Copilot CLI（`gh copilot`）で既にサインイン済みの場合、�
 
 | ファイルパターン | 役割 |
 |---|---|
-| `*.record.prompt.md` | レコードごとのプロンプト。Handlebars 変数は CSV の列名と `{{NR}}` (行番号) にマッピングされます。 |
+| `*.record.prompt.md` | レコードごとのプロンプト。Handlebars 変数は CSV の列名と `{{NR}}` (行番号) にマッピングされます。**`output.columns` フロントマターブロックが必須です。** |
 | `*.session.prompt.md` | セッション内の全レコードで共有されるシステムメッセージ。 |
+
+### 出力スキーマ（フロントマター）
+
+`*.record.prompt.md` の先頭に YAML フロントマターで出力列を宣言します。
+
+````markdown
+---
+output:
+  columns:
+    - name: sentiment        # 出力 CSV の列名
+      path: sentiment        # JSON レスポンスへのドット記法パス
+      required: true         # キーが欠落した場合にエラーをスロー
+    - name: confidence
+      path: meta.confidence
+      default: "0.0"         # キー欠落時のフォールバック値（required: true と併用不可）
+---
+（プロンプト本文…）
+````
+
+Copilot は JSON オブジェクトで応答する必要があります（` ```json ``` ` コードブロックで囲んでも可）。  
+宣言した各列がレスポンスから抽出され、独立した CSV 列として書き出されます。
+
+> **列名の衝突** — `name` が入力 CSV のヘッダ列名と重複する場合、処理開始前に非ゼロステータスで終了します。
 
 ### セッションモード
 
@@ -190,14 +214,31 @@ sample/
 
 **`sentiment.record.prompt.md`**
 
-```
+````markdown
+---
+output:
+  columns:
+    - name: sentiment
+      path: sentiment
+      required: true
+    - name: reason
+      path: reason
+      required: true
+---
 レコード番号: {{NR}}
 製品名: {{product}}
 スコア: {{score}} / 5
 コメント: {{comment}}
 
-上記のレビューの感情を分析し、「感情ラベル: <ラベル>。<理由を1文で>」の形式で答えてください。
+上記のレビューの感情を分析し、以下の JSON 形式で返してください。
+
+```json
+{
+  "sentiment": "<positive|neutral|negative>",
+  "reason": "<理由を1文で>"
+}
 ```
+````
 
 **実行:**
 
@@ -211,8 +252,8 @@ csvpilot \
 **出力** (`reviews__sentiment.csv`):
 
 ```
-id,product,reviewer,score,comment,_copilot_response
-1,スマートフォンX,田中太郎,4,動作は速いが電池の持ちがやや短い,"感情ラベル: ポジティブ。..."
+id,product,reviewer,score,comment,sentiment,reason
+1,スマートフォンX,田中太郎,4,動作は速いが電池の持ちがやや短い,positive,動作速度への満足感が示されており全体的に肯定的な評価と判断できます。
 ```
 
 ### RBQL で行を絞り込んでから処理

@@ -23,6 +23,7 @@ A CLI tool that processes CSV files row-by-row using the GitHub Copilot SDK. It 
 ## Features
 
 - **Handlebars templates** — Define per-record prompts with `*.record.prompt.md` and a shared system message with `*.session.prompt.md`
+- **Schema-driven multi-column output** — Declare output columns in `*.record.prompt.md` frontmatter; Copilot must respond in JSON and each field is mapped to its own CSV column
 - **RBQL filtering** — Apply SQL-like row filtering before sending records to the LLM
 - **Session modes** — `whole` mode retains conversation history across records; `record` mode processes each row independently
 - **Streaming I/O** — Reads and writes CSV as a stream for low memory usage
@@ -102,8 +103,31 @@ Place two types of Markdown files in your prompt directory:
 
 | File pattern | Role |
 |---|---|
-| `*.record.prompt.md` | Per-record prompt. Handlebars variables map to CSV column names plus `{{NR}}` (row number). |
+| `*.record.prompt.md` | Per-record prompt. Handlebars variables map to CSV column names plus `{{NR}}` (row number). **Must include** an `output.columns` frontmatter block. |
 | `*.session.prompt.md` | System message shared across all records in a session. |
+
+### Output schema (frontmatter)
+
+Each `*.record.prompt.md` **must** declare the output columns in a YAML frontmatter block:
+
+```markdown
+---
+output:
+  columns:
+    - name: sentiment        # column name written to the output CSV
+      path: sentiment        # dot-notation path into the JSON response
+      required: true         # throw if this key is absent from the response
+    - name: confidence
+      path: meta.confidence
+      default: "0.0"         # fallback value when key is absent (cannot combine with required: true)
+---
+(prompt body here…)
+```
+
+Copilot must respond with a JSON object (optionally wrapped in a ` ```json ``` ` code block).  
+Each declared column is extracted from the response and written as its own CSV column.
+
+> **Column name collision** — if any `name` duplicates an input CSV header, CsvPilot exits with a non-zero status before processing begins.
 
 ### Session modes
 
@@ -190,15 +214,31 @@ Keep answers concise (1-2 sentences).
 
 **`sentiment.record.prompt.md`**
 
-```
+````markdown
+---
+output:
+  columns:
+    - name: sentiment
+      path: sentiment
+      required: true
+    - name: reason
+      path: reason
+      required: true
+---
 Record: {{NR}}
 Product: {{product}}
 Score: {{score}} / 5
 Comment: {{comment}}
 
-Analyse the sentiment and respond in the format:
-"Sentiment label: <label>. <one-sentence reason>"
+Analyse the sentiment and return JSON:
+
+```json
+{
+  "sentiment": "<positive|neutral|negative>",
+  "reason": "<one-sentence reason>"
+}
 ```
+````
 
 **Run:**
 
@@ -212,8 +252,8 @@ csvpilot \
 **Output** (`reviews__sentiment.csv`):
 
 ```
-id,product,reviewer,score,comment,_copilot_response
-1,Smartphone X,Taro,4,Fast but short battery life,"Sentiment label: Positive. ..."
+id,product,reviewer,score,comment,sentiment,reason
+1,Smartphone X,Taro,4,Fast but short battery life,positive,The high rating and positive language indicate overall satisfaction.
 ```
 
 ### Filter rows with RBQL before processing

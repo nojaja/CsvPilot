@@ -9,6 +9,7 @@ import { loadCsvRecords } from './csvProcessor';
 import { renderTemplate } from './templateRenderer';
 import { buildOutputPath, createOutputWriter } from './outputWriter';
 import type { CsvOutputWriter } from './outputWriter';
+import { parseJsonResponse, extractColumns, getOutputColumnNames } from './responseParser';
 import {
   startClient,
   createCopilotSession,
@@ -25,12 +26,21 @@ async function processRecord(
   record: CsvRecord,
   headers: string[],
   rowIndex: number,
-  template: string,
-  writer: CsvOutputWriter
+  recordPrompt: PromptFile,
+  writer: CsvOutputWriter,
+  csvPath: string
 ): Promise<void> {
-  const prompt = renderTemplate(template, record, headers, rowIndex);
+  const prompt = renderTemplate(recordPrompt.content, record, headers, rowIndex);
   const response = await sendPrompt(session, prompt);
-  await writer.writeRow(record, response);
+
+  const parsed = parseJsonResponse(response);
+  const responseValues = extractColumns(
+    parsed,
+    recordPrompt.outputSchema!,
+    { file: path.basename(csvPath), rowIndex }
+  );
+
+  await writer.writeRow(record, responseValues);
 }
 
 /**
@@ -40,11 +50,12 @@ async function processWithWholeSession(
   session: CopilotSession,
   records: CsvRecord[],
   headers: string[],
-  template: string,
-  writer: CsvOutputWriter
+  recordPrompt: PromptFile,
+  writer: CsvOutputWriter,
+  csvPath: string
 ): Promise<void> {
   for (let i = 0; i < records.length; i++) {
-    await processRecord(session, records[i], headers, i + 1, template, writer);
+    await processRecord(session, records[i], headers, i + 1, recordPrompt, writer, csvPath);
   }
 }
 
@@ -55,16 +66,44 @@ async function processWithRecordSession(
   client: CopilotClient,
   records: CsvRecord[],
   headers: string[],
-  template: string,
+  recordPrompt: PromptFile,
   writer: CsvOutputWriter,
   systemMessage: string,
+  csvPath: string,
   model?: string,
   provider?: ProviderConfig
 ): Promise<void> {
   for (let i = 0; i < records.length; i++) {
     const session = await createCopilotSession(client, systemMessage, model, provider);
-    await processRecord(session, records[i], headers, i + 1, template, writer);
+    await processRecord(session, records[i], headers, i + 1, recordPrompt, writer, csvPath);
     await disconnectSession(session);
+  }
+}
+
+/**
+ * record.prompt.md の出力スキーマを検証し、入力ヘッダとの衝突を確認する
+ */
+function validateSchemaAgainstHeaders(
+  recordPrompt: PromptFile,
+  inputHeaders: string[]
+): void {
+  if (!recordPrompt.outputSchema) {
+    throw new Error(
+      `"${recordPrompt.path}" には output.columns の宣言がありません。` +
+      ' frontmatter に output: columns: を追加してください。'
+    );
+  }
+
+  const outputNames = getOutputColumnNames(recordPrompt.outputSchema.columns);
+  const headerSet = new Set(inputHeaders);
+
+  for (const name of outputNames) {
+    if (headerSet.has(name)) {
+      throw new Error(
+        `出力列名 "${name}" が入力CSVのヘッダ列名と衝突しています ` +
+        `(プロンプト: ${recordPrompt.path})`
+      );
+    }
   }
 }
 
@@ -82,18 +121,25 @@ async function processOneCombo(
   const csvBasename = path.basename(csvPath, '.csv');
   const outputPath = buildOutputPath(options.output, csvBasename, recordPrompt.basename);
   const { headers, records } = await loadCsvRecords(csvPath, options.delimiter, options.query);
-  const writer = await createOutputWriter(outputPath, headers);
+
+  validateSchemaAgainstHeaders(recordPrompt, headers);
+
+  const additionalColumns = getOutputColumnNames(recordPrompt.outputSchema!.columns);
+  const writer = await createOutputWriter(outputPath, headers, additionalColumns);
 
   if (options.mode === 'whole' && wholeSession) {
-    await processWithWholeSession(wholeSession, records, headers, recordPrompt.content, writer);
+    await processWithWholeSession(
+      wholeSession, records, headers, recordPrompt, writer, csvPath
+    );
   } else {
     await processWithRecordSession(
       client,
       records,
       headers,
-      recordPrompt.content,
+      recordPrompt,
       writer,
       systemMessage,
+      csvPath,
       options.model,
       options.byok?.provider
     );

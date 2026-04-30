@@ -1,6 +1,6 @@
 {
     "name": "csvpilot",
-    "version": "1.0.3",
+    "version": "1.1.0",
     "description": "CLI tool to batch-process large CSV datasets using the GitHub Copilot SDK with a unified prompt template",
     "main": "dist/csvpilot.bundle.js",
     "bin": {
@@ -44,12 +44,14 @@
         "csv-parse": "^5.5.6",
         "csv-stringify": "^6.5.1",
         "handlebars": "^4.7.8",
+        "js-yaml": "^4.1.1",
         "nodeconfigloder": "^1.0.1",
         "rbql": "^0.30.0"
     },
     "devDependencies": {
         "@types/handlebars": "^4.1.0",
         "@types/jest": "^29.5.14",
+        "@types/js-yaml": "^4.0.9",
         "@types/node": "^20.0.0",
         "@typescript-eslint/eslint-plugin": "^7.0.0",
         "@typescript-eslint/parser": "^7.0.0",

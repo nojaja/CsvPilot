@@ -50,12 +50,28 @@ export interface CsvPilotConfigFile {
 /** prompt.mdファイルの種類 */
 export type PromptFileType = 'session' | 'record';
 
+/** output.columns の1列定義 */
+export interface OutputColumnDef {
+  name: string;
+  path: string;
+  required?: boolean;
+  default?: string;
+}
+
+/** record.prompt.md の出力スキーマ宣言 */
+export interface OutputSchema {
+  columns: OutputColumnDef[];
+}
+
 /** 読み込んだprompt.mdファイル */
 export interface PromptFile {
   path: string;
   type: PromptFileType;
+  /** frontmatter を除いた Markdown 本文 */
   content: string;
   basename: string;
+  /** record type の場合のみ設定される出力スキーマ */
+  outputSchema?: OutputSchema;
 }
 
 /** CSVレコード（ヘッダー名 + インデックスでアクセス可能） */
