@@ -1,6 +1,7 @@
 import * as path from 'path';
 import type { CopilotClient } from '@github/copilot-sdk';
 import type { CopilotSession } from '@github/copilot-sdk';
+import type { ProviderConfig } from '@github/copilot-sdk';
 import type { CsvPilotOptions, CsvRecord, PromptFile } from './types';
 import { resolvePromptFiles, resolveCsvFiles } from './fileResolver';
 import { loadPromptFiles, buildSystemMessage, getRecordPrompts } from './promptLoader';
@@ -57,10 +58,11 @@ async function processWithRecordSession(
   template: string,
   writer: CsvOutputWriter,
   systemMessage: string,
-  model?: string
+  model?: string,
+  provider?: ProviderConfig
 ): Promise<void> {
   for (let i = 0; i < records.length; i++) {
-    const session = await createCopilotSession(client, systemMessage, model);
+    const session = await createCopilotSession(client, systemMessage, model, provider);
     await processRecord(session, records[i], headers, i + 1, template, writer);
     await disconnectSession(session);
   }
@@ -86,7 +88,14 @@ async function processOneCombo(
     await processWithWholeSession(wholeSession, records, headers, recordPrompt.content, writer);
   } else {
     await processWithRecordSession(
-      client, records, headers, recordPrompt.content, writer, systemMessage, options.model
+      client,
+      records,
+      headers,
+      recordPrompt.content,
+      writer,
+      systemMessage,
+      options.model,
+      options.byok?.provider
     );
   }
 
@@ -121,7 +130,7 @@ async function createWholeSessionIfNeeded(
   systemMessage: string
 ): Promise<CopilotSession | null> {
   if (options.mode !== 'whole') return null;
-  return createCopilotSession(client, systemMessage, options.model);
+  return createCopilotSession(client, systemMessage, options.model, options.byok?.provider);
 }
 
 /**

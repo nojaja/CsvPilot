@@ -67,6 +67,7 @@ csvpilot [options]
   -o, --output <dir>         出力先フォルダ
 
 省略可能:
+  -c, --config   <path...>   設定ファイル（json/yaml、複数指定時は後勝ち）
   -q, --query    <query>     RBQL クエリ文字列（行フィルタリング用）
   -m, --mode     <mode>      セッションモード: whole | record  (デフォルト: whole)
   --token        <token>     GitHub 認証トークン（GITHUB_TOKEN 環境変数より優先）
@@ -110,6 +111,56 @@ GitHub Copilot CLI（`gh copilot`）で既にサインイン済みの場合、�
 |---|---|
 | `whole`（デフォルト） | 全レコードを1つの会話セッションで処理（会話履歴を保持）。 |
 | `record` | レコードごとに独立したセッションを開始（コンテキスト共有なし）。 |
+
+### 設定ファイル（`--config`）
+
+JSON/YAML に CLI オプションをまとめて記述し、`-c, --config` で読み込めます。
+設定ファイルと CLI 引数を同時に指定した場合、CLI 引数が優先されます。
+
+利用可能キー:
+
+- `prompts`, `input`, `query`, `output`, `mode`, `token`, `model`, `delimiter`
+- `byok.provider`（Copilot SDK の `provider` 設定）
+- `proxy.http`, `proxy.https`, `proxy.noProxy`
+
+例（`config.yaml`）:
+
+```yaml
+prompts:
+  - sample/prompt
+input:
+  - sample/csv/reviews.csv
+output: sample/output
+mode: record
+model: gpt-5
+delimiter: ","
+
+byok:
+  provider:
+    type: openai
+    baseUrl: https://api.openai.com/v1
+    apiKey: ${OPENAI_API_KEY}
+    wireApi: responses
+
+proxy:
+  http: http://proxy.local:8080
+  https: http://proxy.local:8080
+  noProxy:
+    - localhost
+    - 127.0.0.1
+```
+
+設定ファイルで実行:
+
+```bash
+csvpilot -c ./config.yaml
+```
+
+一部を CLI で上書き:
+
+```bash
+csvpilot -c ./config.yaml --mode whole --model gpt-5.3-codex
+```
 
 ---
 

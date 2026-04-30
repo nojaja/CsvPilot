@@ -2,6 +2,8 @@
  * CsvPilot 共有型定義
  */
 
+import type { ProviderConfig } from '@github/copilot-sdk';
+
 /** セッションモード */
 export type SessionMode = 'whole' | 'record';
 
@@ -15,6 +17,34 @@ export interface CsvPilotOptions {
   token?: string;
   model?: string;
   delimiter: string;
+  byok?: ByokConfig;
+  proxy?: ProxyConfig;
+}
+
+/** BYOK設定 */
+export interface ByokConfig {
+  provider: ProviderConfig;
+}
+
+/** Proxy設定 */
+export interface ProxyConfig {
+  http?: string;
+  https?: string;
+  noProxy?: string;
+}
+
+/** 設定ファイルの構造 */
+export interface CsvPilotConfigFile {
+  prompts?: string[];
+  input?: string[];
+  query?: string;
+  output?: string;
+  mode?: SessionMode;
+  token?: string;
+  model?: string;
+  delimiter?: string;
+  byok?: ByokConfig;
+  proxy?: ProxyConfig;
 }
 
 /** prompt.mdファイルの種類 */

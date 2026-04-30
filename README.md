@@ -67,6 +67,7 @@ Required:
   -o, --output <dir>         Output directory
 
 Optional:
+  -c, --config   <path...>   Config file(s): json/yaml (later files override earlier)
   -q, --query    <query>     RBQL query string for row filtering
   -m, --mode     <mode>      Session mode: whole | record  (default: whole)
   --token        <token>     GitHub auth token (overrides GITHUB_TOKEN env var)
@@ -110,6 +111,56 @@ Place two types of Markdown files in your prompt directory:
 |---|---|
 | `whole` (default) | All records share a single conversation session (history is preserved). |
 | `record` | Each record starts a fresh session (no shared context). |
+
+### Config file (`--config`)
+
+You can define CLI options in JSON/YAML and load them via `-c, --config`.
+If both config and CLI args are provided, CLI args take precedence.
+
+Supported keys:
+
+- `prompts`, `input`, `query`, `output`, `mode`, `token`, `model`, `delimiter`
+- `byok.provider` (Copilot SDK `provider` settings)
+- `proxy.http`, `proxy.https`, `proxy.noProxy`
+
+Example (`config.yaml`):
+
+```yaml
+prompts:
+  - sample/prompt
+input:
+  - sample/csv/reviews.csv
+output: sample/output
+mode: record
+model: gpt-5
+delimiter: ","
+
+byok:
+  provider:
+    type: openai
+    baseUrl: https://api.openai.com/v1
+    apiKey: ${OPENAI_API_KEY}
+    wireApi: responses
+
+proxy:
+  http: http://proxy.local:8080
+  https: http://proxy.local:8080
+  noProxy:
+    - localhost
+    - 127.0.0.1
+```
+
+Run with config:
+
+```bash
+csvpilot -c ./config.yaml
+```
+
+Override some values from CLI:
+
+```bash
+csvpilot -c ./config.yaml --mode whole --model gpt-5.3-codex
+```
 
 ---
 
