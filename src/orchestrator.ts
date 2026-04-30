@@ -2,7 +2,7 @@ import * as path from 'path';
 import type { CopilotClient } from '@github/copilot-sdk';
 import type { CopilotSession } from '@github/copilot-sdk';
 import type { ProviderConfig } from '@github/copilot-sdk';
-import type { CsvPilotOptions, CsvRecord, PromptFile } from './types';
+import type { CsvPilotOptions, CsvRecord, PromptFile, SessionMode } from './types';
 import { resolvePromptFiles, resolveCsvFiles } from './fileResolver';
 import { loadPromptFiles, buildSystemMessage, getRecordPrompts } from './promptLoader';
 import { loadCsvRecords } from './csvProcessor';
@@ -115,7 +115,7 @@ async function processOneCombo(
   recordPrompt: PromptFile,
   options: CsvPilotOptions,
   client: CopilotClient,
-  wholeSession: CopilotSession | null,
+  sharedSession: CopilotSession | null,
   systemMessage: string
 ): Promise<void> {
   const csvBasename = path.basename(csvPath, '.csv');
@@ -127,9 +127,9 @@ async function processOneCombo(
   const additionalColumns = getOutputColumnNames(recordPrompt.outputSchema!.columns);
   const writer = await createOutputWriter(outputPath, headers, additionalColumns);
 
-  if (options.mode === 'whole' && wholeSession) {
+  if (sharedSession) {
     await processWithWholeSession(
-      wholeSession, records, headers, recordPrompt, writer, csvPath
+      sharedSession, records, headers, recordPrompt, writer, csvPath
     );
   } else {
     await processWithRecordSession(
@@ -160,11 +160,59 @@ async function processAllCombos(
   wholeSession: CopilotSession | null,
   systemMessage: string
 ): Promise<void> {
-  for (const csvPath of csvPaths) {
-    for (const recordPrompt of recordPrompts) {
-      await processOneCombo(csvPath, recordPrompt, options, client, wholeSession, systemMessage);
+  if (options.mode === 'whole') {
+    for (const csvPath of csvPaths) {
+      for (const recordPrompt of recordPrompts) {
+        await processOneCombo(csvPath, recordPrompt, options, client, wholeSession, systemMessage);
+      }
+    }
+    return;
+  }
+
+  if (options.mode === 'record') {
+    for (const csvPath of csvPaths) {
+      for (const recordPrompt of recordPrompts) {
+        await processOneCombo(csvPath, recordPrompt, options, client, null, systemMessage);
+      }
+    }
+    return;
+  }
+
+  const sessionGroups = buildSessionGroups(csvPaths, options.mode);
+  for (const groupedCsvPaths of sessionGroups.values()) {
+    const session = await createCopilotSession(
+      client,
+      systemMessage,
+      options.model,
+      options.byok?.provider
+    );
+
+    try {
+      for (const csvPath of groupedCsvPaths) {
+        for (const recordPrompt of recordPrompts) {
+          await processOneCombo(csvPath, recordPrompt, options, client, session, systemMessage);
+        }
+      }
+    } finally {
+      await disconnectSession(session);
     }
   }
+}
+
+function buildSessionGroups(csvPaths: string[], mode: SessionMode): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+
+  for (const csvPath of csvPaths) {
+    const key = mode === 'folder' ? path.dirname(csvPath) : csvPath;
+    const list = groups.get(key);
+    if (list) {
+      list.push(csvPath);
+    } else {
+      groups.set(key, [csvPath]);
+    }
+  }
+
+  return groups;
 }
 
 /**

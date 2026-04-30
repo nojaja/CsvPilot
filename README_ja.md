@@ -25,7 +25,7 @@ GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI �
 - **Handlebars テンプレート** — `*.record.prompt.md` でレコードごとのプロンプトを定義し、`*.session.prompt.md` でセッション共通のシステムメッセージを定義
 - **スキーマ駆動のマルチカラム出力** — `*.record.prompt.md` のフロントマターに出力カラムを宣言。Copilot は JSON で応答し、各フィールドが独立した CSV 列として書き出される
 - **RBQL フィルタリング** — LLM に送信する前に SQL ライクなクエリで行を絞り込み可能
-- **セッションモード** — `whole` モードはレコード間で会話履歴を保持、`record` モードはレコードごとに独立したセッションを使用
+- **セッションモード** — `whole` / `folder` / `file` / `record` から選択でき、CSV 量に応じて文脈共有と分離のバランスを調整可能
 - **ストリーミング I/O** — CSV をストリームとして読み書きするため低メモリで動作
 - **シングルファイルバンドル** — webpack でビルド済みのバンドルとして配布。インストール後のコンパイルは不要
 
@@ -70,7 +70,7 @@ csvpilot [options]
 省略可能:
   -c, --config   <path...>   設定ファイル（json/yaml、複数指定時は後勝ち）
   -q, --query    <query>     RBQL クエリ文字列（行フィルタリング用）
-  -m, --mode     <mode>      セッションモード: whole | record  (デフォルト: whole)
+  -m, --mode     <mode>      セッションモード: whole | folder | file | record  (デフォルト: whole)
   --token        <token>     GitHub 認証トークン（GITHUB_TOKEN 環境変数より優先）
   --model        <model>     モデル名（省略時は SDK のデフォルトを使用）
   --delimiter    <char>      CSV 区切り文字（デフォルト: ,）
@@ -134,6 +134,8 @@ Copilot は JSON オブジェクトで応答する必要があります（` ```j
 | モード | 動作 |
 |---|---|
 | `whole`（デフォルト） | 全レコードを1つの会話セッションで処理（会話履歴を保持）。 |
+| `folder` | CSV を親フォルダ単位でまとめ、フォルダごとに1つのセッションを共有。 |
+| `file` | CSV ファイルごとに1つのセッションを共有し、同一ファイル内の行で文脈を保持。 |
 | `record` | レコードごとに独立したセッションを開始（コンテキスト共有なし）。 |
 
 ### 設定ファイル（`--config`）

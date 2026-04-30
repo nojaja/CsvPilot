@@ -9,6 +9,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function parseSessionMode(value: unknown): CsvPilotConfigFile['mode'] {
+  return value === 'whole' || value === 'folder' || value === 'file' || value === 'record'
+    ? value
+    : undefined;
+}
+
 function mergeConfig(
   base: CsvPilotConfigFile,
   override: CsvPilotConfigFile
@@ -75,7 +81,7 @@ function normalizeConfig(json: Record<string, unknown>): CsvPilotConfigFile {
       : undefined,
     query: typeof json['query'] === 'string' ? json['query'] : undefined,
     output: typeof json['output'] === 'string' ? json['output'] : undefined,
-    mode: json['mode'] === 'record' ? 'record' : json['mode'] === 'whole' ? 'whole' : undefined,
+    mode: parseSessionMode(json['mode']),
     token: typeof json['token'] === 'string' ? json['token'] : undefined,
     model: typeof json['model'] === 'string' ? json['model'] : undefined,
     delimiter: typeof json['delimiter'] === 'string' ? json['delimiter'] : undefined,

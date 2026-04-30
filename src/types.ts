@@ -5,7 +5,7 @@
 import type { ProviderConfig } from '@github/copilot-sdk';
 
 /** セッションモード */
-export type SessionMode = 'whole' | 'record';
+export type SessionMode = 'whole' | 'folder' | 'file' | 'record';
 
 /** CLIオプション */
 export interface CsvPilotOptions {

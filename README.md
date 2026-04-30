@@ -25,7 +25,7 @@ A CLI tool that processes CSV files row-by-row using the GitHub Copilot SDK. It 
 - **Handlebars templates** — Define per-record prompts with `*.record.prompt.md` and a shared system message with `*.session.prompt.md`
 - **Schema-driven multi-column output** — Declare output columns in `*.record.prompt.md` frontmatter; Copilot must respond in JSON and each field is mapped to its own CSV column
 - **RBQL filtering** — Apply SQL-like row filtering before sending records to the LLM
-- **Session modes** — `whole` mode retains conversation history across records; `record` mode processes each row independently
+- **Session modes** — choose `whole`, `folder`, `file`, or `record` to balance context retention and isolation based on CSV volume
 - **Streaming I/O** — Reads and writes CSV as a stream for low memory usage
 - **Single-file bundle** — Distributed as a pre-built webpack bundle; no compilation required after install
 
@@ -70,7 +70,7 @@ Required:
 Optional:
   -c, --config   <path...>   Config file(s): json/yaml (later files override earlier)
   -q, --query    <query>     RBQL query string for row filtering
-  -m, --mode     <mode>      Session mode: whole | record  (default: whole)
+  -m, --mode     <mode>      Session mode: whole | folder | file | record  (default: whole)
   --token        <token>     GitHub auth token (overrides GITHUB_TOKEN env var)
   --model        <model>     Model name (uses SDK default when omitted)
   --delimiter    <char>      CSV delimiter character (default: ,)
@@ -134,6 +134,8 @@ Each declared column is extracted from the response and written as its own CSV c
 | Mode | Behaviour |
 |---|---|
 | `whole` (default) | All records share a single conversation session (history is preserved). |
+| `folder` | CSV files are grouped by parent folder, and each folder uses one shared session. |
+| `file` | Each CSV file uses one shared session across all its rows. |
 | `record` | Each record starts a fresh session (no shared context). |
 
 ### Config file (`--config`)

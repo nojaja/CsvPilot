@@ -22,7 +22,7 @@ export function createCli(): Command {
     .option('-i, --input <paths...>', 'CSVファイルまたはフォルダ（複数可）')
     .option('-q, --query <query>', 'RBQLクエリ（省略時は全行処理）')
     .option('-o, --output <dir>', '出力先フォルダ')
-    .option('-m, --mode <mode>', 'セッションモード: whole | record')
+    .option('-m, --mode <mode>', 'セッションモード: whole | folder | file | record')
     .option('--token <token>', 'GitHub認証トークン（省略時は環境変数）')
     .option('--model <model>', '使用モデル名')
     .option('--delimiter <char>', 'CSV区切り文字')
@@ -66,7 +66,7 @@ export function buildOptions(opts: Record<string, unknown>): CsvPilotOptions {
   }
 
   const modeValue = asString(opts['mode']) ?? config.mode;
-  const mode: SessionMode = modeValue === 'record' ? 'record' : 'whole';
+  const mode = resolveSessionMode(modeValue);
 
   const model = asString(opts['model']) ?? config.model;
   const delimiter = asString(opts['delimiter']) ?? config.delimiter ?? ',';
@@ -87,6 +87,13 @@ export function buildOptions(opts: Record<string, unknown>): CsvPilotOptions {
     byok: config.byok,
     proxy: config.proxy,
   };
+}
+
+function resolveSessionMode(modeValue: string | undefined): SessionMode {
+  if (modeValue === 'folder' || modeValue === 'file' || modeValue === 'record') {
+    return modeValue;
+  }
+  return 'whole';
 }
 
 function asString(value: unknown): string | undefined {

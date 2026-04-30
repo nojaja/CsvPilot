@@ -66,6 +66,30 @@ describe('cli buildOptions', () => {
     expect(options.delimiter).toBe('\t');
   });
 
+  it('mode に folder と file を指定できる', async () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    await fs.promises.writeFile(
+      configPath,
+      [
+        'prompts:',
+        '  - prompt.record.prompt.md',
+        'input:',
+        '  - input.csv',
+        'output: out',
+        'mode: folder',
+      ].join('\n')
+    );
+
+    const fromConfig = buildOptions({ config: [configPath] });
+    expect(fromConfig.mode).toBe('folder');
+
+    const fromCli = buildOptions({
+      config: [configPath],
+      mode: 'file',
+    });
+    expect(fromCli.mode).toBe('file');
+  });
+
   it('byok設定時にmodel未指定ならエラーにする', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     await fs.promises.writeFile(
