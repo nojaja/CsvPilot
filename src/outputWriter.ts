@@ -3,11 +3,9 @@ import * as path from 'path';
 import { stringify } from 'csv-stringify';
 import type { CsvRecord } from './types';
 
-const RESPONSE_COLUMN = '_copilot_response';
-
 /** 出力CSVライター */
 export interface CsvOutputWriter {
-  writeRow(_record: CsvRecord, _response: string): Promise<void>;
+  writeRow(_record: CsvRecord, _responseValues: Record<string, string>): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -32,25 +30,30 @@ async function ensureOutputDir(outputPath: string): Promise<void> {
 }
 
 /**
- * ストリーミングCSV出力ライターを作成する
+ * ストリーミングCSV出力ライターを作成する。
+ * @param outputPath 出力ファイルパス
+ * @param inputHeaders 入力CSVのヘッダ列名配列
+ * @param additionalColumns 追加する出力列名配列（output.columns から生成）
  */
 export async function createOutputWriter(
   outputPath: string,
-  headers: string[]
+  inputHeaders: string[],
+  additionalColumns: string[]
 ): Promise<CsvOutputWriter> {
   await ensureOutputDir(outputPath);
 
-  const outputHeaders = [...headers, RESPONSE_COLUMN];
+  const outputHeaders = [...inputHeaders, ...additionalColumns];
   const stringifier = stringify({ header: true, columns: outputHeaders });
   const fileStream = fs.createWriteStream(outputPath, { encoding: 'utf-8' });
 
   stringifier.pipe(fileStream);
 
-  const writeRow = (record: CsvRecord, response: string): Promise<void> => {
+  const writeRow = (record: CsvRecord, responseValues: Record<string, string>): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const row = outputHeaders.map(h =>
-        h === RESPONSE_COLUMN ? response : (record[h] ?? '')
-      );
+      const row = outputHeaders.map(h => {
+        if (inputHeaders.includes(h)) return record[h] ?? '';
+        return responseValues[h] ?? '';
+      });
       const canWrite = stringifier.write(row);
       if (canWrite) {
         resolve();

@@ -1,0 +1,6 @@
+rules:
+  requiredColumns:
+    - sentiment
+    - reason
+  rowCount:
+    min: 1

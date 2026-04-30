@@ -14,6 +14,7 @@ A CLI tool that processes CSV files row-by-row using the GitHub Copilot SDK. It 
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Examples](#examples)
+- [AI Agent Workflow](#ai-agent-workflow)
 - [Contributing](#contributing)
 - [Support](#support)
 - [License](#license)
@@ -23,8 +24,9 @@ A CLI tool that processes CSV files row-by-row using the GitHub Copilot SDK. It 
 ## Features
 
 - **Handlebars templates** — Define per-record prompts with `*.record.prompt.md` and a shared system message with `*.session.prompt.md`
+- **Schema-driven multi-column output** — Declare output columns in `*.record.prompt.md` frontmatter; Copilot must respond in JSON and each field is mapped to its own CSV column
 - **RBQL filtering** — Apply SQL-like row filtering before sending records to the LLM
-- **Session modes** — `whole` mode retains conversation history across records; `record` mode processes each row independently
+- **Session modes** — choose `whole`, `folder`, `file`, or `record` to balance context retention and isolation based on CSV volume
 - **Streaming I/O** — Reads and writes CSV as a stream for low memory usage
 - **Single-file bundle** — Distributed as a pre-built webpack bundle; no compilation required after install
 
@@ -58,22 +60,56 @@ node dist/csvpilot.bundle.js --help
 
 ## Usage
 
-```
-csvpilot [options]
+### Subcommands (v1.2.0+)
 
-Required:
+```
+csvpilot <command> [options]
+
+Commands:
+  run       Run the CSV processing pipeline
+  doctor    Pre-flight checks: verify environment, token, and config paths
+  plan      Dry-run: build the execution plan without calling the LLM
+  verify    Validate output CSV against a verify spec file
+  init      Scaffold AI agent template files  (usage: init agent)
+```
+
+Run `csvpilot <command> --help` for command-specific options.
+
+#### Common options (`run` / `doctor` / `plan`)
+
+```
   -p, --prompts <paths...>   Prompt .md file(s) or folder(s)
   -i, --input  <paths...>    Input CSV file(s) or folder(s)
   -o, --output <dir>         Output directory
-
-Optional:
-  -q, --query    <query>     RBQL query string for row filtering
-  -m, --mode     <mode>      Session mode: whole | record  (default: whole)
-  --token        <token>     GitHub auth token (overrides GITHUB_TOKEN env var)
-  --model        <model>     Model name (uses SDK default when omitted)
-  --delimiter    <char>      CSV delimiter character (default: ,)
+  -c, --config <path...>     Config file(s): json/yaml (later files override earlier)
+  -q, --query  <query>       RBQL query string for row filtering
+  -m, --mode   <mode>        Session mode: whole | folder | file | record  (default: whole)
+  --token      <token>       GitHub auth token (overrides GITHUB_TOKEN env var)
+  --model      <model>       Model name (uses SDK default when omitted)
+  --delimiter  <char>        CSV delimiter character (default: ,)
   -V, --version              Output the version number
   -h, --help                 Display help
+```
+
+#### Command-specific options
+
+| Command | Option | Description |
+|---|---|---|
+| `doctor`, `plan` | `--format <fmt>` | Output format: `text` (default) or `json` |
+| `plan` | `--save-plan <path>` | Save the JSON plan to a file |
+| `run` | `--plan <path>` | Load a saved plan JSON file |
+| `verify` | `--actual <path>` | Path to the actual output CSV or directory |
+| `verify` | `--spec <path>` | Path to `verify.spec.yaml` |
+| `verify` | `--format <fmt>` | Output format: `text` (default) or `json` |
+| `init agent` | `--output <dir>` | Target directory (default: `.csvpilot`) |
+| `init agent` | `--force` | Overwrite existing template files |
+
+### Legacy mode (deprecated)
+
+The root-level options form is still supported for backward compatibility, but the `run` subcommand is preferred:
+
+```
+csvpilot [options]   # deprecated — use: csvpilot run [options]
 ```
 
 ### Authentication
@@ -101,15 +137,90 @@ Place two types of Markdown files in your prompt directory:
 
 | File pattern | Role |
 |---|---|
-| `*.record.prompt.md` | Per-record prompt. Handlebars variables map to CSV column names plus `{{NR}}` (row number). |
+| `*.record.prompt.md` | Per-record prompt. Handlebars variables map to CSV column names plus `{{NR}}` (row number). **Must include** an `output.columns` frontmatter block. |
 | `*.session.prompt.md` | System message shared across all records in a session. |
+
+### Output schema (frontmatter)
+
+Each `*.record.prompt.md` **must** declare the output columns in a YAML frontmatter block:
+
+```markdown
+---
+output:
+  columns:
+    - name: sentiment        # column name written to the output CSV
+      path: sentiment        # dot-notation path into the JSON response
+      required: true         # throw if this key is absent from the response
+    - name: confidence
+      path: meta.confidence
+      default: "0.0"         # fallback value when key is absent (cannot combine with required: true)
+---
+(prompt body here…)
+```
+
+Copilot must respond with a JSON object (optionally wrapped in a ` ```json ``` ` code block).  
+Each declared column is extracted from the response and written as its own CSV column.
+
+> **Column name collision** — if any `name` duplicates an input CSV header, CsvPilot exits with a non-zero status before processing begins.
 
 ### Session modes
 
 | Mode | Behaviour |
 |---|---|
 | `whole` (default) | All records share a single conversation session (history is preserved). |
+| `folder` | CSV files are grouped by parent folder, and each folder uses one shared session. |
+| `file` | Each CSV file uses one shared session across all its rows. |
 | `record` | Each record starts a fresh session (no shared context). |
+
+### Config file (`--config`)
+
+You can define CLI options in JSON/YAML and load them via `-c, --config`.
+If both config and CLI args are provided, CLI args take precedence.
+
+Supported keys:
+
+- `prompts`, `input`, `query`, `output`, `mode`, `token`, `model`, `delimiter`
+- `byok.provider` (Copilot SDK `provider` settings)
+- `proxy.http`, `proxy.https`, `proxy.noProxy`
+
+Example (`config.yaml`):
+
+```yaml
+prompts:
+  - sample/prompt
+input:
+  - sample/csv/reviews.csv
+output: sample/output
+mode: record
+model: gpt-5
+delimiter: ","
+
+byok:
+  provider:
+    type: openai
+    baseUrl: https://api.openai.com/v1
+    apiKey: ${OPENAI_API_KEY}
+    wireApi: responses
+
+proxy:
+  http: http://proxy.local:8080
+  https: http://proxy.local:8080
+  noProxy:
+    - localhost
+    - 127.0.0.1
+```
+
+Run with config:
+
+```bash
+csvpilot -c ./config.yaml
+```
+
+Override some values from CLI:
+
+```bash
+csvpilot -c ./config.yaml --mode whole --model gpt-5.3-codex
+```
 
 ---
 
@@ -139,15 +250,31 @@ Keep answers concise (1-2 sentences).
 
 **`sentiment.record.prompt.md`**
 
-```
+````markdown
+---
+output:
+  columns:
+    - name: sentiment
+      path: sentiment
+      required: true
+    - name: reason
+      path: reason
+      required: true
+---
 Record: {{NR}}
 Product: {{product}}
 Score: {{score}} / 5
 Comment: {{comment}}
 
-Analyse the sentiment and respond in the format:
-"Sentiment label: <label>. <one-sentence reason>"
+Analyse the sentiment and return JSON:
+
+```json
+{
+  "sentiment": "<positive|neutral|negative>",
+  "reason": "<one-sentence reason>"
+}
 ```
+````
 
 **Run:**
 
@@ -161,8 +288,8 @@ csvpilot \
 **Output** (`reviews__sentiment.csv`):
 
 ```
-id,product,reviewer,score,comment,_copilot_response
-1,Smartphone X,Taro,4,Fast but short battery life,"Sentiment label: Positive. ..."
+id,product,reviewer,score,comment,sentiment,reason
+1,Smartphone X,Taro,4,Fast but short battery life,positive,The high rating and positive language indicate overall satisfaction.
 ```
 
 ### Filter rows with RBQL before processing
@@ -173,6 +300,95 @@ csvpilot \
   -i sample/csv/reviews.csv \
   -o sample/output \
   -q "select * where a.score >= 4"
+```
+
+---
+
+## AI Agent Workflow
+
+v1.2.0 adds dedicated subcommands designed for use inside AI agent pipelines. The recommended four-step sequence is:
+
+### 1. Scaffold template files
+
+```bash
+csvpilot init agent --output .csvpilot
+```
+
+Creates `.csvpilot/agent.config.yaml`, `.csvpilot/verify.spec.yaml`, and `.csvpilot/tasks.md`.  
+Pass `--force` to overwrite existing files.
+
+### 2. Pre-flight check
+
+```bash
+csvpilot doctor -c .csvpilot/agent.config.yaml --format json
+```
+
+Checks Node.js version, GitHub token, prompt/input path existence, and model configuration.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | All checks passed |
+| `3` | Warnings only (run can proceed) |
+| `1` | At least one failure |
+
+### 3. Build the execution plan (dry-run)
+
+```bash
+csvpilot plan -c .csvpilot/agent.config.yaml --format json --save-plan .csvpilot/plan.json
+```
+
+Resolves all CSV/prompt file combinations and planned output paths **without** calling the LLM.  
+Exit code `0` on success, `2` if errors are found in the plan.
+
+Sample JSON output:
+
+```json
+{
+  "planId": "plan-20260501T120000",
+  "resolvedOptions": { "mode": "record", "model": "gpt-4o" },
+  "matrix": [
+    {
+      "input": "sample/csv/reviews.csv",
+      "prompt": "sample/prompt/sentiment.record.prompt.md",
+      "output": "sample/output/reviews__sentiment.csv"
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}
+```
+
+### 4. Run the pipeline
+
+```bash
+# Load the saved plan:
+csvpilot run --plan .csvpilot/plan.json
+
+# Or run directly from a config file:
+csvpilot run -c .csvpilot/agent.config.yaml
+```
+
+### 5. Verify the output
+
+```bash
+csvpilot verify --actual sample/output --spec .csvpilot/verify.spec.yaml --format json
+```
+
+Checks required columns and row count against the spec.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | All checks passed |
+| `5` | Spec violation |
+
+#### `verify.spec.yaml` example
+
+```yaml
+requiredColumns:
+  - sentiment
+  - reason
+rowCount:
+  min: 1
 ```
 
 ---

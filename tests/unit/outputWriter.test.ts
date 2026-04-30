@@ -27,28 +27,60 @@ describe('outputWriter', () => {
   });
 
   describe('createOutputWriter', () => {
-    it('CSVファイルにヘッダー付きで行を書き込む', async () => {
+    it('動的な追加カラムでヘッダを書き込む', async () => {
       const outputPath = path.join(tmpDir, 'output.csv');
-      const headers = ['name', 'age'];
-      const writer = await createOutputWriter(outputPath, headers);
+      const writer = await createOutputWriter(outputPath, ['name', 'age'], ['sentiment', 'reason']);
 
-      await writer.writeRow({ name: 'Alice', age: '30' }, 'response text');
+      await writer.writeRow({ name: 'Alice', age: '30' }, { sentiment: 'positive', reason: 'good' });
       await writer.close();
 
       const content = await fs.promises.readFile(outputPath, 'utf-8');
       expect(content).toContain('name');
       expect(content).toContain('age');
-      expect(content).toContain('_copilot_response');
-      expect(content).toContain('Alice');
-      expect(content).toContain('response text');
+      expect(content).toContain('sentiment');
+      expect(content).toContain('reason');
+    });
+
+    it('_copilot_response 列が出力に含まれない', async () => {
+      const outputPath = path.join(tmpDir, 'no_fixed.csv');
+      const writer = await createOutputWriter(outputPath, ['id'], ['result']);
+
+      await writer.writeRow({ id: '1' }, { result: 'ok' });
+      await writer.close();
+
+      const content = await fs.promises.readFile(outputPath, 'utf-8');
+      expect(content).not.toContain('_copilot_response');
+    });
+
+    it('responseValues の値が対応するカラムへ書き込まれる', async () => {
+      const outputPath = path.join(tmpDir, 'values.csv');
+      const writer = await createOutputWriter(outputPath, ['col'], ['sentiment', 'confidence']);
+
+      await writer.writeRow({ col: 'val' }, { sentiment: 'negative', confidence: '0.75' });
+      await writer.close();
+
+      const content = await fs.promises.readFile(outputPath, 'utf-8');
+      expect(content).toContain('negative');
+      expect(content).toContain('0.75');
+    });
+
+    it('additionalColumns に含まれないキーは無視される', async () => {
+      const outputPath = path.join(tmpDir, 'extra.csv');
+      const writer = await createOutputWriter(outputPath, ['id'], ['sentiment']);
+
+      await writer.writeRow({ id: '1' }, { sentiment: 'positive', unknown_key: 'ignored' });
+      await writer.close();
+
+      const content = await fs.promises.readFile(outputPath, 'utf-8');
+      expect(content).not.toContain('unknown_key');
     });
 
     it('出力ディレクトリが存在しない場合は作成する', async () => {
       const nestedDir = path.join(tmpDir, 'a', 'b', 'c');
       const outputPath = path.join(nestedDir, 'output.csv');
-      const writer = await createOutputWriter(outputPath, ['col']);
+      const writer = await createOutputWriter(outputPath, ['col'], ['r']);
 
-      await writer.writeRow({ col: 'val' }, 'resp');
+      await writer.writeRow({ col: 'val' }, { r: 'resp' });
       await writer.close();
 
       const exists = await fs.promises.access(outputPath).then(() => true).catch(() => false);
@@ -57,10 +89,10 @@ describe('outputWriter', () => {
 
     it('複数行を連続して書き込める', async () => {
       const outputPath = path.join(tmpDir, 'multi.csv');
-      const writer = await createOutputWriter(outputPath, ['id', 'val']);
+      const writer = await createOutputWriter(outputPath, ['id', 'val'], ['result']);
 
-      await writer.writeRow({ id: '1', val: 'a' }, 'resp1');
-      await writer.writeRow({ id: '2', val: 'b' }, 'resp2');
+      await writer.writeRow({ id: '1', val: 'a' }, { result: 'resp1' });
+      await writer.writeRow({ id: '2', val: 'b' }, { result: 'resp2' });
       await writer.close();
 
       const content = await fs.promises.readFile(outputPath, 'utf-8');

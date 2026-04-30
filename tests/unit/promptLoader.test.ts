@@ -90,4 +90,129 @@ describe('promptLoader', () => {
       expect(records[0].type).toBe('record');
     });
   });
+
+  // ---- frontmatter ----
+  describe('frontmatter の解析', () => {
+    it('frontmatter なしの record.prompt.md は outputSchema が undefined', async () => {
+      const file = path.join(tmpDir, 'plain.record.prompt.md');
+      await fs.promises.writeFile(file, 'Analyze: {{name}}');
+
+      const result = await loadPromptFiles([file]);
+      expect(result[0].outputSchema).toBeUndefined();
+    });
+
+    it('frontmatter ありの場合、outputSchema が設定される', async () => {
+      const file = path.join(tmpDir, 'schema.record.prompt.md');
+      await fs.promises.writeFile(
+        file,
+        [
+          '---',
+          'output:',
+          '  columns:',
+          '    - name: sentiment',
+          '      path: sentiment',
+          '      required: true',
+          '    - name: reason',
+          '      path: reason',
+          '      required: false',
+          '      default: ""',
+          '---',
+          'Analyze: {{comment}}',
+        ].join('\n')
+      );
+
+      const result = await loadPromptFiles([file]);
+      expect(result[0].outputSchema).toBeDefined();
+      expect(result[0].outputSchema!.columns).toHaveLength(2);
+      expect(result[0].outputSchema!.columns[0].name).toBe('sentiment');
+      expect(result[0].outputSchema!.columns[0].required).toBe(true);
+      expect(result[0].outputSchema!.columns[1].name).toBe('reason');
+      expect(result[0].outputSchema!.columns[1].required).toBe(false);
+      expect(result[0].outputSchema!.columns[1].default).toBe('');
+    });
+
+    it('content は frontmatter を除いた本文のみ返す', async () => {
+      const file = path.join(tmpDir, 'body.record.prompt.md');
+      await fs.promises.writeFile(
+        file,
+        [
+          '---',
+          'output:',
+          '  columns:',
+          '    - name: result',
+          '      path: result',
+          '      required: true',
+          '---',
+          'This is the body.',
+        ].join('\n')
+      );
+
+      const result = await loadPromptFiles([file]);
+      expect(result[0].content).toBe('This is the body.');
+    });
+
+    it('session.prompt.md は frontmatter があっても outputSchema を設定しない', async () => {
+      const file = path.join(tmpDir, 'sys.session.prompt.md');
+      await fs.promises.writeFile(
+        file,
+        ['---', 'output:', '  columns: []', '---', 'system message'].join('\n')
+      );
+
+      const result = await loadPromptFiles([file]);
+      expect(result[0].type).toBe('session');
+      expect(result[0].outputSchema).toBeUndefined();
+    });
+
+    it('output.columns に name 重複があるとエラーをスローする', async () => {
+      const file = path.join(tmpDir, 'dup.record.prompt.md');
+      await fs.promises.writeFile(
+        file,
+        [
+          '---',
+          'output:',
+          '  columns:',
+          '    - name: sentiment',
+          '      path: sentiment',
+          '      required: true',
+          '    - name: sentiment',
+          '      path: sentiment2',
+          '      required: true',
+          '---',
+          'body',
+        ].join('\n')
+      );
+
+      await expect(loadPromptFiles([file])).rejects.toThrow(/sentiment/);
+    });
+
+    it('output.columns が空の場合はエラーをスローする', async () => {
+      const file = path.join(tmpDir, 'empty.record.prompt.md');
+      await fs.promises.writeFile(
+        file,
+        ['---', 'output:', '  columns: []', '---', 'body'].join('\n')
+      );
+
+      await expect(loadPromptFiles([file])).rejects.toThrow();
+    });
+
+    it('required: true と default を同時指定するとエラーをスローする', async () => {
+      const file = path.join(tmpDir, 'conflict.record.prompt.md');
+      await fs.promises.writeFile(
+        file,
+        [
+          '---',
+          'output:',
+          '  columns:',
+          '    - name: col',
+          '      path: col',
+          '      required: true',
+          '      default: "fallback"',
+          '---',
+          'body',
+        ].join('\n')
+      );
+
+      await expect(loadPromptFiles([file])).rejects.toThrow();
+    });
+  });
 });

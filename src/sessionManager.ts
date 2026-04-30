@@ -1,5 +1,6 @@
 import { CopilotClient, approveAll } from '@github/copilot-sdk';
 import type { CopilotSession } from '@github/copilot-sdk';
+import type { CopilotClientOptions, ProviderConfig } from '@github/copilot-sdk';
 import type { CsvPilotOptions } from './types';
 
 /** セッション管理コンテキスト */
@@ -17,20 +18,28 @@ export async function startClient(options: CsvPilotOptions): Promise<CopilotClie
   const tokenFromOption = options.token;
   const tokenFromEnv = resolveToken();
   const token = tokenFromOption ?? tokenFromEnv;
+  const clientOptions: CopilotClientOptions = {};
+
+  const proxyEnv = buildProxyEnv(options);
+  if (proxyEnv) {
+    clientOptions.env = proxyEnv;
+  }
 
   // If a token is provided (via --token or environment variable), treat as
   // OAuth GitHub App authentication and pass the token explicitly to the SDK.
   // Also set `useLoggedInUser: false` to avoid falling back to stored CLI
   // credentials.
   if (token) {
-    const client = new CopilotClient({ gitHubToken: token, useLoggedInUser: false });
+    clientOptions.gitHubToken = token;
+    clientOptions.useLoggedInUser = false;
+    const client = new CopilotClient(clientOptions);
     await client.start();
     return client;
   }
 
   // No token provided: treat as GitHub Signed-in User. The SDK will use any
   // stored CLI credentials (or prompt the user to sign in interactively).
-  const client = new CopilotClient();
+  const client = new CopilotClient(clientOptions);
   await client.start();
   return client;
 }
@@ -52,7 +61,8 @@ function resolveToken(): string | undefined {
 export async function createCopilotSession(
   client: CopilotClient,
   systemMessage: string,
-  model?: string
+  model?: string,
+  provider?: ProviderConfig
 ): Promise<CopilotSession> {
   const config: Parameters<typeof client.createSession>[0] = {
     onPermissionRequest: approveAll,
@@ -66,7 +76,41 @@ export async function createCopilotSession(
     config.systemMessage = { content: systemMessage };
   }
 
+  if (provider) {
+    config.provider = provider;
+  }
+
   return client.createSession(config);
+}
+
+function buildProxyEnv(options: CsvPilotOptions): Record<string, string | undefined> | undefined {
+  const proxy = options.proxy;
+  if (!proxy) {
+    return undefined;
+  }
+
+  const env: Record<string, string | undefined> = { ...process.env };
+  let hasOverride = false;
+
+  if (proxy.http) {
+    env['HTTP_PROXY'] = proxy.http;
+    env['http_proxy'] = proxy.http;
+    hasOverride = true;
+  }
+
+  if (proxy.https) {
+    env['HTTPS_PROXY'] = proxy.https;
+    env['https_proxy'] = proxy.https;
+    hasOverride = true;
+  }
+
+  if (proxy.noProxy) {
+    env['NO_PROXY'] = proxy.noProxy;
+    env['no_proxy'] = proxy.noProxy;
+    hasOverride = true;
+  }
+
+  return hasOverride ? env : undefined;
 }
 
 /**
