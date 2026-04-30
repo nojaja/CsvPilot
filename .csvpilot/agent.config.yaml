@@ -1,0 +1,8 @@
+prompts:
+  - sample/prompt
+input:
+  - sample/csv/reviews.csv
+output: sample/output
+mode: record
+model: gpt-5.3-codex
+delimiter: ","

@@ -14,6 +14,7 @@ GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI �
 - [使い方](#使い方)
 - [設定](#設定)
 - [使用例](#使用例)
+- [AI エージェントワークフロー](#ai-エージェントワークフロー)
 - [コントリビューション](#コントリビューション)
 - [サポート](#サポート)
 - [ライセンス](#ライセンス)
@@ -59,23 +60,56 @@ node dist/csvpilot.bundle.js --help
 
 ## 使い方
 
-```
-csvpilot [options]
+### サブコマンド（v1.2.0+）
 
-必須:
+```
+csvpilot <command> [options]
+
+Commands:
+  run       CSV 処理パイプラインを実行する
+  doctor    事前チェック: 環境・トークン・設定パスを検証する
+  plan      ドライラン: LLM を呼び出さずに実行計画を生成する
+  verify    出力 CSV を検証スペックと照合する
+  init      AI エージェント用テンプレートファイルを生成する  (使用法: init agent)
+```
+
+コマンド固有のオプションは `csvpilot <command> --help` で確認できます。
+
+#### 共通オプション（`run` / `doctor` / `plan`）
+
+```
   -p, --prompts <paths...>   プロンプト .md ファイルまたはフォルダ（複数指定可）
   -i, --input  <paths...>    入力 CSV ファイルまたはフォルダ（複数指定可）
   -o, --output <dir>         出力先フォルダ
-
-省略可能:
-  -c, --config   <path...>   設定ファイル（json/yaml、複数指定時は後勝ち）
-  -q, --query    <query>     RBQL クエリ文字列（行フィルタリング用）
-  -m, --mode     <mode>      セッションモード: whole | folder | file | record  (デフォルト: whole)
-  --token        <token>     GitHub 認証トークン（GITHUB_TOKEN 環境変数より優先）
-  --model        <model>     モデル名（省略時は SDK のデフォルトを使用）
-  --delimiter    <char>      CSV 区切り文字（デフォルト: ,）
+  -c, --config <path...>     設定ファイル（json/yaml、複数指定時は後勝ち）
+  -q, --query  <query>       RBQL クエリ文字列（行フィルタリング用）
+  -m, --mode   <mode>        セッションモード: whole | folder | file | record  (デフォルト: whole)
+  --token      <token>       GitHub 認証トークン（GITHUB_TOKEN 環境変数より優先）
+  --model      <model>       モデル名（省略時は SDK のデフォルトを使用）
+  --delimiter  <char>        CSV 区切り文字（デフォルト: ,）
   -V, --version              バージョンを表示
   -h, --help                 ヘルプを表示
+```
+
+#### コマンド固有オプション
+
+| コマンド | オプション | 説明 |
+|---|---|---|
+| `doctor`、`plan` | `--format <fmt>` | 出力フォーマット: `text`（デフォルト）または `json` |
+| `plan` | `--save-plan <path>` | JSON 計画をファイルに保存する |
+| `run` | `--plan <path>` | 保存済み計画 JSON ファイルを読み込む |
+| `verify` | `--actual <path>` | 実際の出力 CSV またはディレクトリのパス |
+| `verify` | `--spec <path>` | `verify.spec.yaml` のパス |
+| `verify` | `--format <fmt>` | 出力フォーマット: `text`（デフォルト）または `json` |
+| `init agent` | `--output <dir>` | 出力先ディレクトリ（デフォルト: `.csvpilot`） |
+| `init agent` | `--force` | 既存のテンプレートファイルを上書きする |
+
+### レガシーモード（非推奨）
+
+ルートレベルのオプション形式は後方互換性のために引き続き利用できますが、`run` サブコマンドの使用を推奨します。
+
+```
+csvpilot [options]   # 非推奨 — 代わりに: csvpilot run [options]
 ```
 
 ### 認証
@@ -266,6 +300,95 @@ csvpilot \
   -i sample/csv/reviews.csv \
   -o sample/output \
   -q "select * where a.score >= 4"
+```
+
+---
+
+## AI エージェントワークフロー
+
+v1.2.0 では AI エージェントパイプライン内での利用を想定した専用サブコマンドを追加しました。推奨される実行手順は以下のとおりです。
+
+### 1. テンプレートファイルの生成
+
+```bash
+csvpilot init agent --output .csvpilot
+```
+
+`.csvpilot/agent.config.yaml`、`.csvpilot/verify.spec.yaml`、`.csvpilot/tasks.md` を生成します。  
+既存ファイルを上書きする場合は `--force` を付けてください。
+
+### 2. 事前チェック
+
+```bash
+csvpilot doctor -c .csvpilot/agent.config.yaml --format json
+```
+
+Node.js バージョン・GitHub トークン・プロンプト/入力パスの存在・モデル設定を検証します。
+
+| 終了コード | 意味 |
+|---|---|
+| `0` | 全チェック合格 |
+| `3` | 警告のみ（実行は可能） |
+| `1` | 1 件以上の失敗あり |
+
+### 3. 実行計画の作成（ドライラン）
+
+```bash
+csvpilot plan -c .csvpilot/agent.config.yaml --format json --save-plan .csvpilot/plan.json
+```
+
+LLM を呼び出さずに CSV/プロンプトの組み合わせと出力先を解決します。  
+終了コード `0`（成功）、`2`（計画にエラーあり）。
+
+JSON 出力例:
+
+```json
+{
+  "planId": "plan-20260501T120000",
+  "resolvedOptions": { "mode": "record", "model": "gpt-4o" },
+  "matrix": [
+    {
+      "input": "sample/csv/reviews.csv",
+      "prompt": "sample/prompt/sentiment.record.prompt.md",
+      "output": "sample/output/reviews__sentiment.csv"
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}
+```
+
+### 4. パイプラインの実行
+
+```bash
+# 保存した計画から実行:
+csvpilot run --plan .csvpilot/plan.json
+
+# 設定ファイルから直接実行:
+csvpilot run -c .csvpilot/agent.config.yaml
+```
+
+### 5. 出力の検証
+
+```bash
+csvpilot verify --actual sample/output --spec .csvpilot/verify.spec.yaml --format json
+```
+
+スペックに照らして必須列とレコード数を検証します。
+
+| 終了コード | 意味 |
+|---|---|
+| `0` | 全チェック合格 |
+| `5` | スペック違反あり |
+
+#### `verify.spec.yaml` の例
+
+```yaml
+requiredColumns:
+  - sentiment
+  - reason
+rowCount:
+  min: 1
 ```
 
 ---

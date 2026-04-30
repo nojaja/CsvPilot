@@ -14,6 +14,7 @@ A CLI tool that processes CSV files row-by-row using the GitHub Copilot SDK. It 
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Examples](#examples)
+- [AI Agent Workflow](#ai-agent-workflow)
 - [Contributing](#contributing)
 - [Support](#support)
 - [License](#license)
@@ -59,23 +60,56 @@ node dist/csvpilot.bundle.js --help
 
 ## Usage
 
-```
-csvpilot [options]
+### Subcommands (v1.2.0+)
 
-Required:
+```
+csvpilot <command> [options]
+
+Commands:
+  run       Run the CSV processing pipeline
+  doctor    Pre-flight checks: verify environment, token, and config paths
+  plan      Dry-run: build the execution plan without calling the LLM
+  verify    Validate output CSV against a verify spec file
+  init      Scaffold AI agent template files  (usage: init agent)
+```
+
+Run `csvpilot <command> --help` for command-specific options.
+
+#### Common options (`run` / `doctor` / `plan`)
+
+```
   -p, --prompts <paths...>   Prompt .md file(s) or folder(s)
   -i, --input  <paths...>    Input CSV file(s) or folder(s)
   -o, --output <dir>         Output directory
-
-Optional:
-  -c, --config   <path...>   Config file(s): json/yaml (later files override earlier)
-  -q, --query    <query>     RBQL query string for row filtering
-  -m, --mode     <mode>      Session mode: whole | folder | file | record  (default: whole)
-  --token        <token>     GitHub auth token (overrides GITHUB_TOKEN env var)
-  --model        <model>     Model name (uses SDK default when omitted)
-  --delimiter    <char>      CSV delimiter character (default: ,)
+  -c, --config <path...>     Config file(s): json/yaml (later files override earlier)
+  -q, --query  <query>       RBQL query string for row filtering
+  -m, --mode   <mode>        Session mode: whole | folder | file | record  (default: whole)
+  --token      <token>       GitHub auth token (overrides GITHUB_TOKEN env var)
+  --model      <model>       Model name (uses SDK default when omitted)
+  --delimiter  <char>        CSV delimiter character (default: ,)
   -V, --version              Output the version number
   -h, --help                 Display help
+```
+
+#### Command-specific options
+
+| Command | Option | Description |
+|---|---|---|
+| `doctor`, `plan` | `--format <fmt>` | Output format: `text` (default) or `json` |
+| `plan` | `--save-plan <path>` | Save the JSON plan to a file |
+| `run` | `--plan <path>` | Load a saved plan JSON file |
+| `verify` | `--actual <path>` | Path to the actual output CSV or directory |
+| `verify` | `--spec <path>` | Path to `verify.spec.yaml` |
+| `verify` | `--format <fmt>` | Output format: `text` (default) or `json` |
+| `init agent` | `--output <dir>` | Target directory (default: `.csvpilot`) |
+| `init agent` | `--force` | Overwrite existing template files |
+
+### Legacy mode (deprecated)
+
+The root-level options form is still supported for backward compatibility, but the `run` subcommand is preferred:
+
+```
+csvpilot [options]   # deprecated — use: csvpilot run [options]
 ```
 
 ### Authentication
@@ -266,6 +300,95 @@ csvpilot \
   -i sample/csv/reviews.csv \
   -o sample/output \
   -q "select * where a.score >= 4"
+```
+
+---
+
+## AI Agent Workflow
+
+v1.2.0 adds dedicated subcommands designed for use inside AI agent pipelines. The recommended four-step sequence is:
+
+### 1. Scaffold template files
+
+```bash
+csvpilot init agent --output .csvpilot
+```
+
+Creates `.csvpilot/agent.config.yaml`, `.csvpilot/verify.spec.yaml`, and `.csvpilot/tasks.md`.  
+Pass `--force` to overwrite existing files.
+
+### 2. Pre-flight check
+
+```bash
+csvpilot doctor -c .csvpilot/agent.config.yaml --format json
+```
+
+Checks Node.js version, GitHub token, prompt/input path existence, and model configuration.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | All checks passed |
+| `3` | Warnings only (run can proceed) |
+| `1` | At least one failure |
+
+### 3. Build the execution plan (dry-run)
+
+```bash
+csvpilot plan -c .csvpilot/agent.config.yaml --format json --save-plan .csvpilot/plan.json
+```
+
+Resolves all CSV/prompt file combinations and planned output paths **without** calling the LLM.  
+Exit code `0` on success, `2` if errors are found in the plan.
+
+Sample JSON output:
+
+```json
+{
+  "planId": "plan-20260501T120000",
+  "resolvedOptions": { "mode": "record", "model": "gpt-4o" },
+  "matrix": [
+    {
+      "input": "sample/csv/reviews.csv",
+      "prompt": "sample/prompt/sentiment.record.prompt.md",
+      "output": "sample/output/reviews__sentiment.csv"
+    }
+  ],
+  "warnings": [],
+  "errors": []
+}
+```
+
+### 4. Run the pipeline
+
+```bash
+# Load the saved plan:
+csvpilot run --plan .csvpilot/plan.json
+
+# Or run directly from a config file:
+csvpilot run -c .csvpilot/agent.config.yaml
+```
+
+### 5. Verify the output
+
+```bash
+csvpilot verify --actual sample/output --spec .csvpilot/verify.spec.yaml --format json
+```
+
+Checks required columns and row count against the spec.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | All checks passed |
+| `5` | Spec violation |
+
+#### `verify.spec.yaml` example
+
+```yaml
+requiredColumns:
+  - sentiment
+  - reason
+rowCount:
+  min: 1
 ```
 
 ---

@@ -1,6 +1,6 @@
 {
     "name": "csvpilot",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "description": "CLI tool to batch-process large CSV datasets using the GitHub Copilot SDK with a unified prompt template",
     "main": "dist/csvpilot.bundle.js",
     "bin": {
