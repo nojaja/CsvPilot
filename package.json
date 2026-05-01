@@ -1,12 +1,12 @@
 {
     "name": "csvpilot",
-    "version": "1.2.3",
+    "version": "1.2.4",
     "type": "commonjs",
     "description": "CLI for batch CSV processing with GitHub Copilot SDK and reusable prompts",
     "main": "dist/csvpilot.bundle.js",
     "types": "dist/index.d.ts",
     "bin": {
-        "csvpilot": "./dist/csvpilot.bundle.js"
+        "csvpilot": "dist/csvpilot.bundle.js"
     },
     "scripts": {
         "build": "webpack --config webpack.config.js",
@@ -28,6 +28,7 @@
     "keywords": [
         "csv",
         "copilot",
+        "copilot-sdk",
         "cli",
         "ai",
         "rbql"
