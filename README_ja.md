@@ -24,7 +24,7 @@ GitHub Copilot SDK を使って CSV ファイルを1行ずつ処理する CLI �
 ## 機能
 
 - **Handlebars テンプレート** — `*.record.prompt.md` でレコードごとのプロンプトを定義し、`*.session.prompt.md` でセッション共通のシステムメッセージを定義
-- **スキーマ駆動のマルチカラム出力** — `*.record.prompt.md` のフロントマターに出力カラムを宣言。Copilot は JSON で応答し、各フィールドが独立した CSV 列として書き出される
+- **スキーマ駆動のマルチカラム出力** — `*.record.prompt.md` のFront Matterに出力カラムを宣言。Copilot は JSON で応答し、各フィールドが独立した CSV 列として書き出される
 - **RBQL フィルタリング** — LLM に送信する前に SQL ライクなクエリで行を絞り込み可能
 - **セッションモード** — `whole` / `folder` / `file` / `record` から選択でき、CSV 量に応じて文脈共有と分離のバランスを調整可能
 - **ストリーミング I/O** — CSV をストリームとして読み書きするため低メモリで動作
@@ -49,7 +49,7 @@ npx csvpilot run -p <プロンプトディレクトリ> -i <CSVファイル> -o 
 ### ソースからビルド
 
 ```bash
-git clone https://github.com/TODO/csvpilot.git
+git clone https://github.com/nojaja/csvpilot.git
 cd csvpilot
 npm install
 npm run build
@@ -111,13 +111,13 @@ GitHub Copilot CLI（`gh copilot`）で既にサインイン済みの場合、�
 未認証の場合、または別のトークンを使いたい場合は、以下のいずれかの方法で指定してください。
 
 1. 環境変数（推奨）:
-   ```bash
-   export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-   ```
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+```
 2. CLI オプション:
-   ```bash
-  csvpilot run --token ghp_xxxxxxxxxxxx ...
-   ```
+```bash
+csvpilot run --token ghp_xxxxxxxxxxxx ...
+```
 
 ---
 
@@ -129,12 +129,12 @@ GitHub Copilot CLI（`gh copilot`）で既にサインイン済みの場合、�
 
 | ファイルパターン | 役割 |
 |---|---|
-| `*.record.prompt.md` | レコードごとのプロンプト。Handlebars 変数は CSV の列名と `{{NR}}` (行番号) にマッピングされます。**`output.columns` フロントマターブロックが必須です。** |
+| `*.record.prompt.md` | レコードごとのプロンプト。Handlebars 変数は CSV の列名と `{{NR}}` (行番号) にマッピングされます。**`output.columns` Front Matterブロックが必須です。** |
 | `*.session.prompt.md` | セッション内の全レコードで共有されるシステムメッセージ。 |
 
-### 出力スキーマ（フロントマター）
+### 出力スキーマ（Front Matter）
 
-`*.record.prompt.md` の先頭に YAML フロントマターで出力列を宣言します。
+`*.record.prompt.md` の先頭に YAML Front Matterで出力列を宣言します。
 
 ````markdown
 ---
@@ -205,13 +205,13 @@ proxy:
 設定ファイルで実行:
 
 ```bash
-csvpilot -c ./config.yaml
+csvpilot run -c ./config.yaml
 ```
 
 一部を CLI で上書き:
 
 ```bash
-csvpilot -c ./config.yaml --mode whole --model gpt-5.3-codex
+csvpilot run -c ./config.yaml --mode whole --model gpt-5.3-codex
 ```
 
 ---
@@ -271,7 +271,7 @@ output:
 **実行:**
 
 ```bash
-csvpilot \
+csvpilot run\
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output
@@ -287,7 +287,7 @@ id,product,reviewer,score,comment,sentiment,reason
 ### RBQL で行を絞り込んでから処理
 
 ```bash
-csvpilot \
+csvpilot run\
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output \
@@ -404,10 +404,8 @@ rowCount:
 
 ## サポート
 
-- **バグ報告 / 質問**: [GitHub Issues](https://github.com/TODO/csvpilot/issues)
+- **バグ報告 / 質問**: [GitHub Issues](https://github.com/nojaja/csvpilot/issues)
 - **詳細仕様**: [`docs/spec/`](docs/spec/) を参照してください。
-
-> TODO: 上記の GitHub リポジトリ URL を正しい URL に更新してください。
 
 ---
 

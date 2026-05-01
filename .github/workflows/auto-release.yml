@@ -2,6 +2,7 @@ name: Auto Release on Version Change
 
 # package.json の version 変更を検知し、タグ作成を必須実行したうえで
 # 選択済み公開先（npm / GitHub Release）へ自動公開するワークフロー
+# npm 公開は OIDC Trusted Publishing 前提で、publish-npm ジョブ内で npm 11.5.1 を固定利用する
 on:
   push:
     branches: ['main']
@@ -14,7 +15,7 @@ env:
   CHANGELOG_PATH: 'CHANGELOG.md'
   # node -v (このセッションで実行): v22.21.0
   # package.json の engines.node: 未定義
-  # 上記より固定値として 22.x を採用
+  # 上記よりメイン利用バージョンとテストマトリクスは固定値 22.x を採用
   NODE_VERSION: '22.x'
 
 permissions:
@@ -100,6 +101,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'npm'
 
       - name: 依存パッケージをインストール
         run: npm ci
@@ -147,13 +149,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
           registry-url: https://registry.npmjs.org/
 
-      - name: npm を固定安定版へ更新
-        run: npm install -g npm@10.8.2
-
-      - name: npm バージョンを確認
-        run: npm -v
+      - name: Trusted Publishing 用に npm 11.5.1 を固定
+        run: |
+          npm i -g npm@11.5.1
+          NPM_VERSION=$(npm --version)
+          echo "npm version: $NPM_VERSION"
+          node -e "const version = process.argv[1]; const [major, minor, patch] = version.split('.').map(Number); const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))); if (!ok) { console.error('npm 11.5.1 以上が必要です:', version); process.exit(1); }" "$NPM_VERSION"
         
       - name: 依存パッケージをインストール
         run: npm ci
@@ -172,6 +176,8 @@ jobs:
       # 4) Repository: CsvPilot
       # 5) Workflow filename: auto-release.yml
       # 6) Environment name: 空欄
+      # 補足: runner 側 npm 不整合や promise-retry 欠落対策としても npm 11.5.1 固定を維持する
+      # 補足: npx 実行を想定する公開パッケージでは package.json の bin 定義が必要（本リポジトリは定義済み）
 
   create-release:
     # GitHub Release を作成（タグ作成ジョブ後）

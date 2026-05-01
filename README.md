@@ -49,7 +49,7 @@ npx csvpilot run -p <prompt-dir> -i <csv-file> -o <output-dir>
 ### From source
 
 ```bash
-git clone https://github.com/TODO/csvpilot.git
+git clone https://github.com/nojaja/csvpilot.git
 cd csvpilot
 npm install
 npm run build
@@ -111,13 +111,14 @@ If you are already signed in via GitHub Copilot CLI (`gh copilot`), no additiona
 If you are not authenticated, or want to use a specific token, provide it via one of the following:
 
 1. Environment variable (recommended):
-   ```bash
-   export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-   ```
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+```
+
 2. CLI option:
-   ```bash
-  csvpilot run --token ghp_xxxxxxxxxxxx ...
-   ```
+```bash
+csvpilot run --token ghp_xxxxxxxxxxxx ...
+```
 
 ---
 
@@ -205,13 +206,13 @@ proxy:
 Run with config:
 
 ```bash
-csvpilot -c ./config.yaml
+csvpilot run -c ./config.yaml
 ```
 
 Override some values from CLI:
 
 ```bash
-csvpilot -c ./config.yaml --mode whole --model gpt-5.3-codex
+csvpilot run -c ./config.yaml --mode whole --model gpt-5.3-codex
 ```
 
 ---
@@ -271,7 +272,7 @@ Analyse the sentiment and return JSON:
 **Run:**
 
 ```bash
-csvpilot \
+csvpilot run\
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output
@@ -287,7 +288,7 @@ id,product,reviewer,score,comment,sentiment,reason
 ### Filter rows with RBQL before processing
 
 ```bash
-csvpilot \
+csvpilot run\
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output \
@@ -298,7 +299,7 @@ csvpilot \
 
 ## AI Agent Workflow
 
-v1.2.0 adds dedicated subcommands designed for use inside AI agent pipelines. The recommended four-step sequence is:
+v1.2.0 adds dedicated subcommands designed for use inside AI agent pipelines. The recommended five-step sequence is:
 
 ### 1. Scaffold template files
 
@@ -404,10 +405,8 @@ For significant changes, please open an issue first to discuss the approach.
 
 ## Support
 
-- **Issues / Bug reports**: [GitHub Issues](https://github.com/TODO/csvpilot/issues)
+- **Issues / Bug reports**: [GitHub Issues](https://github.com/nojaja/csvpilot/issues)
 - **Documentation**: See [`docs/spec/`](docs/spec/) for detailed specifications.
-
-> TODO: Update the GitHub repository URL above.
 
 ---
 
