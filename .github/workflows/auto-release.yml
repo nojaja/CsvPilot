@@ -149,23 +149,20 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org/
 
-      - name: npm を最新安定版へ更新
-        run: npm install -g npm@latest
+      - name: npm を固定安定版へ更新
+        run: npm install -g npm@10.8.2
 
       - name: npm バージョンを確認
         run: npm -v
-
-      # ランナー側 npm 不整合（Cannot find module 'promise-retry'）が発生した場合のみ有効化:
-      # - name: npm ワークアラウンド（固定版）
-      #   run: npm i -g npm@10.8.2
-
+        
       - name: 依存パッケージをインストール
         run: npm ci
 
       - name: プロダクションビルド
         run: npm run build
 
-      - name: npm publish（Trusted Publishing）
+      # OIDC Trusted Publishing で NPM_TOKEN 不要
+      - name: npm へ公開（Trusted Publishing）
         run: npm publish --access public
 
       # NPM.js Trusted Publisher 登録手順:
