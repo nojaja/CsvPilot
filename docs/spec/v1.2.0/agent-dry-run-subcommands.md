@@ -50,8 +50,7 @@ v1.2.0 では、AIエージェント（GitHub Copilot 等）が CsvPilot を事�
 | `csvpilot init agent` | AI向け設定テンプレート生成 | human readable |
 
 補足:
-- ルート直下オプション実行（現行 `csvpilot -p ...`）は v1.2.0 で非推奨とし、v2.0.0 で削除対象。
-- v1.2.0 では後方互換用に残しつつ、`csvpilot run` を推奨としてヘルプに表示する。
+- ルート直下オプション実行（`csvpilot -p ...`）はサポートしない。
 
 ### 1) `csvpilot doctor`
 
@@ -233,7 +232,7 @@ csvpilot init agent --output .csvpilot
 
 互換性影響:
 - 新規サブコマンド導入によりヘルプ体系と推奨起動方法が変化
-- 既存のルート直下オプションは v1.2.0 で動作維持（非推奨）、v2.0.0 で削除予定
+- 既存のルート直下オプションは非対応となる
 
 移行手順:
 1. 既存実行を `csvpilot run ...` へ置換
@@ -250,7 +249,7 @@ csvpilot init agent --output .csvpilot
 4. `doctor` は fail 項目ごとに remediation を出力する
 5. `verify` は失敗時に差分理由（列・件数・ルール名）を返す
 6. 各サブコマンドの終了コードが仕様通りである
-7. 既存 `csvpilot -p ...` は v1.2.0 で引き続き動作し、非推奨警告を表示する
+7. ルート直下オプション（`csvpilot -p ...`）はエラー終了し、`csvpilot run` 利用を案内する
 
 ---
 
@@ -263,7 +262,7 @@ csvpilot init agent --output .csvpilot
 | unit/run | `--plan` 適用時の整合性チェック |
 | unit/verify | ルール評価、差分出力、終了コード |
 | e2e/agent-flow | `init -> doctor -> plan -> run -> verify` の一連実行 |
-| e2e/compat | 旧起動形式の互換動作と非推奨警告 |
+| e2e/compat | 旧起動形式の非対応エラーと `run` への移行案内 |
 
 ---
 
@@ -272,9 +271,23 @@ csvpilot init agent --output .csvpilot
 1. 仕様確定（本書）
 2. `doctor` / `plan` / `verify` 実装
 3. `init agent` 実装
-4. `run` サブコマンド化 + 旧起動形式の非推奨化
+4. `run` サブコマンド化 + 旧起動形式の削除
 5. README / README_ja 更新
 6. v1.2.0 リリース
+
+---
+
+## 設計判断 (Design Decisions)
+
+| 判断事項 | 採用方針 | 理由 |
+|---|---|---|
+| サブコマンド分離 | `doctor` / `plan` / `run` / `verify` を独立コマンドとして実装 | 各フェーズの責務を明確にし、AI エージェントが段階的に操作できるようにするため |
+| `plan` は LLM 非呼び出し | `plan` 実行時に LLM API を一切呼ばない | コスト・副作用なしで事前検証できることが機械自動化の前提条件であるため |
+| `--format json` 必須 | 全新規サブコマンドに `--format json` を提供 | AI エージェントがパースしやすい構造化出力を保証するため |
+| 終了コード明示 | コマンドごとに用途別の終了コードを定義 | CI でのステータス判定を人手なしで行えるようにするため |
+| 旧起動形式の廃止 | ルート直下オプション（`csvpilot -p ...`）は非対応 | CLI 入口を `run` に統一し、運用と実装の分岐をなくすため |
+| DI コンテナ不使用 | Jest モックで外部依存を差し替え | 軽量な実装を維持しつつテスト可能性を確保するため |
+| ラッパー経由 I/O | ファイル I/O・API 呼び出しは必ずラッパー経由 | 単体テストで外部通信をモック化できるようにするため |
 
 ---
 

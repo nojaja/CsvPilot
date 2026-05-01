@@ -20,6 +20,14 @@ import {
 
 /**
  * 1レコードをCopilotに送信して結果を出力する
+ * @param session Copilotセッション
+ * @param record CSVレコード
+ * @param headers CSVヘッダ列名配列
+ * @param rowIndex 行番号（1始まり）
+ * @param recordPrompt recordプロンプトファイル
+ * @param writer CSVライター
+ * @param csvPath 入力CSVファイルパス
+ * @returns void
  */
 async function processRecord(
   session: CopilotSession,
@@ -45,6 +53,13 @@ async function processRecord(
 
 /**
  * 全レコードを単一セッションで処理する（wholeモード）
+ * @param session Copilotセッション
+ * @param records CSVレコード配列
+ * @param headers CSVヘッダ列名配列
+ * @param recordPrompt recordプロンプトファイル
+ * @param writer CSVライター
+ * @param csvPath 入力CSVファイルパス
+ * @returns void
  */
 async function processWithWholeSession(
   session: CopilotSession,
@@ -61,6 +76,16 @@ async function processWithWholeSession(
 
 /**
  * 各レコードを独立セッションで処理する（recordモード）
+ * @param client CopilotClient
+ * @param records CSVレコード配列
+ * @param headers CSVヘッダ列名配列
+ * @param recordPrompt recordプロンプトファイル
+ * @param writer CSVライター
+ * @param systemMessage システムメッセージ
+ * @param csvPath 入力CSVファイルパス
+ * @param model 使用モデル名
+ * @param provider プロバイダー設定
+ * @returns void
  */
 async function processWithRecordSession(
   client: CopilotClient,
@@ -82,6 +107,9 @@ async function processWithRecordSession(
 
 /**
  * record.prompt.md の出力スキーマを検証し、入力ヘッダとの衝突を確認する
+ * @param recordPrompt recordプロンプトファイル
+ * @param inputHeaders 入力CSVのヘッダ列名配列
+ * @returns void
  */
 function validateSchemaAgainstHeaders(
   recordPrompt: PromptFile,
@@ -109,6 +137,13 @@ function validateSchemaAgainstHeaders(
 
 /**
  * (CSVファイル, record.prompt.md) の1組み合わせを処理する
+ * @param csvPath 入力CSVファイルパス
+ * @param recordPrompt recordプロンプトファイル
+ * @param options 実行オプション
+ * @param client CopilotClient
+ * @param sharedSession 共有セッション（nullの場合はレコード別セッション）
+ * @param systemMessage システムメッセージ
+ * @returns void
  */
 async function processOneCombo(
   csvPath: string,
@@ -150,34 +185,69 @@ async function processOneCombo(
 }
 
 /**
- * 全(CSV×record.prompt.md)の組み合わせを処理する
+ * 全(CSV×record.prompt.md)の組み合わせを処理する（wholeモード専用）
+ * @param csvPaths 入力CSVファイルパス配列
+ * @param recordPrompts recordプロンプトファイル配列
+ * @param options 実行オプション
+ * @param client CopilotClient
+ * @param wholeSession 共有セッション
+ * @param systemMessage システムメッセージ
+ * @returns void
  */
-async function processAllCombos(
+async function processWholeMode(
   csvPaths: string[],
   recordPrompts: PromptFile[],
   options: CsvPilotOptions,
   client: CopilotClient,
-  wholeSession: CopilotSession | null,
+  wholeSession: CopilotSession,
   systemMessage: string
 ): Promise<void> {
-  if (options.mode === 'whole') {
-    for (const csvPath of csvPaths) {
-      for (const recordPrompt of recordPrompts) {
-        await processOneCombo(csvPath, recordPrompt, options, client, wholeSession, systemMessage);
-      }
+  for (const csvPath of csvPaths) {
+    for (const recordPrompt of recordPrompts) {
+      await processOneCombo(csvPath, recordPrompt, options, client, wholeSession, systemMessage);
     }
-    return;
   }
+}
 
-  if (options.mode === 'record') {
-    for (const csvPath of csvPaths) {
-      for (const recordPrompt of recordPrompts) {
-        await processOneCombo(csvPath, recordPrompt, options, client, null, systemMessage);
-      }
+/**
+ * 全(CSV×record.prompt.md)の組み合わせを処理する（recordモード専用）
+ * @param csvPaths 入力CSVファイルパス配列
+ * @param recordPrompts recordプロンプトファイル配列
+ * @param options 実行オプション
+ * @param client CopilotClient
+ * @param systemMessage システムメッセージ
+ * @returns void
+ */
+async function processRecordMode(
+  csvPaths: string[],
+  recordPrompts: PromptFile[],
+  options: CsvPilotOptions,
+  client: CopilotClient,
+  systemMessage: string
+): Promise<void> {
+  for (const csvPath of csvPaths) {
+    for (const recordPrompt of recordPrompts) {
+      await processOneCombo(csvPath, recordPrompt, options, client, null, systemMessage);
     }
-    return;
   }
+}
 
+/**
+ * 全(CSV×record.prompt.md)の組み合わせを処理する（folder/fileモード専用）
+ * @param csvPaths 入力CSVファイルパス配列
+ * @param recordPrompts recordプロンプトファイル配列
+ * @param options 実行オプション
+ * @param client CopilotClient
+ * @param systemMessage システムメッセージ
+ * @returns void
+ */
+async function processGroupedMode(
+  csvPaths: string[],
+  recordPrompts: PromptFile[],
+  options: CsvPilotOptions,
+  client: CopilotClient,
+  systemMessage: string
+): Promise<void> {
   const sessionGroups = buildSessionGroups(csvPaths, options.mode);
   for (const groupedCsvPaths of sessionGroups.values()) {
     const session = await createCopilotSession(
@@ -186,7 +256,6 @@ async function processAllCombos(
       options.model,
       options.byok?.provider
     );
-
     try {
       for (const csvPath of groupedCsvPaths) {
         for (const recordPrompt of recordPrompts) {
@@ -199,6 +268,45 @@ async function processAllCombos(
   }
 }
 
+/**
+ * 全(CSV×record.prompt.md)の組み合わせを処理する
+ * @param csvPaths 入力CSVファイルパス配列
+ * @param recordPrompts recordプロンプトファイル配列
+ * @param options 実行オプション
+ * @param client CopilotClient
+ * @param wholeSession wholeモード用共有セッション（nullの場合はモード別処理）
+ * @param systemMessage システムメッセージ
+ * @returns void
+ */
+async function processAllCombos(
+  csvPaths: string[],
+  recordPrompts: PromptFile[],
+  options: CsvPilotOptions,
+  client: CopilotClient,
+  wholeSession: CopilotSession | null,
+  systemMessage: string
+): Promise<void> {
+  if (options.mode === 'whole' && wholeSession) {
+    await processWholeMode(csvPaths, recordPrompts, options, client, wholeSession, systemMessage);
+    return;
+  }
+  if (options.mode === 'record') {
+    await processRecordMode(csvPaths, recordPrompts, options, client, systemMessage);
+    return;
+  }
+  await processGroupedMode(csvPaths, recordPrompts, options, client, systemMessage);
+}
+
+/**
+ * 処理名: セッショングループ構築
+ *
+ * 処理概要: CSVパスをセッション共有グループ（フォルダ別またはファイル別）に分類する
+ *
+ * 実装理由: folder/file モードで適切なセッション境界を設定するため
+ * @param csvPaths 入力CSVファイルパス配列
+ * @param mode セッションモード
+ * @returns セッションキーをキー、CSVパス配列を値とするMap
+ */
 function buildSessionGroups(csvPaths: string[], mode: SessionMode): Map<string, string[]> {
   const groups = new Map<string, string[]>();
 
@@ -217,6 +325,10 @@ function buildSessionGroups(csvPaths: string[], mode: SessionMode): Map<string, 
 
 /**
  * wholeモード用のセッションを条件付き作成する
+ * @param client CopilotClient
+ * @param options 実行オプション
+ * @param systemMessage システムメッセージ
+ * @returns wholeモードの場合 CopilotSession、それ以外は null
  */
 async function createWholeSessionIfNeeded(
   client: CopilotClient,
@@ -229,6 +341,8 @@ async function createWholeSessionIfNeeded(
 
 /**
  * バイト値をMB単位にフォーマットする
+ * @param byte バイト数
+ * @returns MB単位の文字列
  */
 function toMByte(byte: number): string {
   return `${Math.floor((byte / 1024 / 1024) * 100) / 100}MB`;
@@ -236,6 +350,8 @@ function toMByte(byte: number): string {
 
 /**
  * メインオーケストレーション処理
+ * @param options 実行オプション
+ * @returns void
  */
 export async function run(options: CsvPilotOptions): Promise<void> {
   const startTime = process.hrtime();

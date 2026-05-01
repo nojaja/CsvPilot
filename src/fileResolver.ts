@@ -8,6 +8,8 @@ const CSV_EXTENSION = '.csv';
 
 /**
  * pathutilの戻り値を安全にstring変換する
+ * @param p 変換対象のパス値（null の場合はエラー）
+ * @returns 変換済みパス文字列
  */
 function toSafePath(p: string | null): string {
   if (p === null) throw new Error('パスの正規化に失敗しました');
@@ -16,6 +18,8 @@ function toSafePath(p: string | null): string {
 
 /**
  * 単一パスがファイルかフォルダかを判定する
+ * @param targetPath 判定対象パス
+ * @returns ディレクトリであれば true
  */
 async function isDirectory(targetPath: string): Promise<boolean> {
   const stat = await fs.promises.stat(targetPath);
@@ -24,6 +28,9 @@ async function isDirectory(targetPath: string): Promise<boolean> {
 
 /**
  * フォルダから指定拡張子のファイルを再帰探索する
+ * @param dirPath 探索対象ディレクトリ
+ * @param extension 対象拡張子（例: '.csv'）
+ * @returns 拡張子に一致するファイルパス配列
  */
 async function walkDirectory(
   dirPath: string,
@@ -49,6 +56,9 @@ async function walkDirectory(
 
 /**
  * 単一パス（ファイルまたはフォルダ）を解決してファイルパス配列を返す
+ * @param rawPath 入力パス
+ * @param extension 対象拡張子
+ * @returns 解決されたファイルパス配列
  */
 async function resolveSinglePath(
   rawPath: string,
@@ -71,6 +81,9 @@ async function resolveSinglePath(
 
 /**
  * 複数パス（ファイル/フォルダ混在）を解決してファイルパス配列を返す
+ * @param rawPaths 入力パス配列
+ * @param extension 対象拡張子
+ * @returns 解決されたファイルパス配列
  */
 export async function resolveFilePaths(
   rawPaths: string[],
@@ -88,6 +101,8 @@ export async function resolveFilePaths(
 
 /**
  * prompt.mdファイルパスを解決する
+ * @param rawPaths 入力パス配列
+ * @returns 解決された prompt.md ファイルパス配列
  */
 export async function resolvePromptFiles(rawPaths: string[]): Promise<string[]> {
   return resolveFilePaths(rawPaths, PROMPT_EXTENSION);
@@ -95,6 +110,8 @@ export async function resolvePromptFiles(rawPaths: string[]): Promise<string[]> 
 
 /**
  * CSVファイルパスを解決する
+ * @param rawPaths 入力パス配列
+ * @returns 解決された CSV ファイルパス配列
  */
 export async function resolveCsvFiles(rawPaths: string[]): Promise<string[]> {
   return resolveFilePaths(rawPaths, CSV_EXTENSION);

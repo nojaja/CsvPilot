@@ -13,6 +13,9 @@ export interface CsvParseResult {
 
 /**
  * CSVファイルをストリーミングで全レコード読み込む
+ * @param filePath 対象CSVファイルパス
+ * @param delimiter CSV区切り文字
+ * @returns ヘッダとレコードの配列
  */
 async function streamAllRecords(
   filePath: string,
@@ -47,6 +50,10 @@ async function streamAllRecords(
 
 /**
  * RBQLクエリをrecordの配列に適用する
+ * @param records CSVレコード配列
+ * @param headers CSVヘッダ列名配列
+ * @param query RBQLクエリ文字列
+ * @returns フィルタ済み CSVレコード配列
  */
 async function applyRbqlFilter(
   records: CsvRecord[],
@@ -76,6 +83,10 @@ async function applyRbqlFilter(
 /**
  * CSVファイルを読み込みRBQLフィルタを適用してレコード配列を返す。
  * queryなしの場合はストリーミング読み込みのみ。
+ * @param filePath 対象CSVファイルパス
+ * @param delimiter CSV区切り文字
+ * @param query RBQLクエリ文字列（オプション）
+ * @returns ヘッダとレコードの配列
  */
 export async function loadCsvRecords(
   filePath: string,
@@ -94,6 +105,10 @@ export async function loadCsvRecords(
 
 /**
  * CSVファイルをストリーミングで1行ずつ処理する（RBQLなしの場合専用）
+ * @param filePath 対象CSVファイルパス
+ * @param delimiter CSV区切り文字
+ * @param onRow 行コールバック関数
+ * @returns ヘッダ列名配列
  */
 export function streamCsvRows(
   filePath: string,

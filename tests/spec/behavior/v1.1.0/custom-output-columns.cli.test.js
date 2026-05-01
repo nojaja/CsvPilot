@@ -68,6 +68,7 @@ describe('csvpilot v1.1.0 カスタム出力カラム E2E', () => {
       fs.writeFileSync(csvFile, 'id,comment\n1,hello\n');
 
       const result = await runCli(cli, [
+        'run',
         '-p', promptFile,
         '-i', csvFile,
         '-o', path.join(tmpDir, 'output'),
@@ -89,6 +90,7 @@ describe('csvpilot v1.1.0 カスタム出力カラム E2E', () => {
       fs.writeFileSync(csvFile, 'id,comment\n1,hello\n');
 
       const result = await runCli(cli, [
+        'run',
         '-p', promptFile,
         '-i', csvFile,
         '-o', path.join(tmpDir, 'output'),
@@ -119,6 +121,7 @@ describe('csvpilot v1.1.0 カスタム出力カラム E2E', () => {
       fs.writeFileSync(csvFile, 'id,comment\n1,hello\n');
 
       const result = await runCli(cli, [
+        'run',
         '-p', promptFile,
         '-i', csvFile,
         '-o', path.join(tmpDir, 'output'),

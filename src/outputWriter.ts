@@ -11,6 +11,10 @@ export interface CsvOutputWriter {
 
 /**
  * 出力ファイルパスを生成する
+ * @param outputDir 出力先ディレクトリ
+ * @param csvBasename 入力CSVのファイル名（拡張子なし）
+ * @param promptBasename プロンプトのベース名
+ * @returns 出力ファイルパス
  */
 export function buildOutputPath(
   outputDir: string,
@@ -23,6 +27,8 @@ export function buildOutputPath(
 
 /**
  * 出力ディレクトリが存在しない場合は作成する
+ * @param outputPath 出力ファイルパス
+ * @returns void
  */
 async function ensureOutputDir(outputPath: string): Promise<void> {
   const dir = path.dirname(outputPath);
@@ -34,6 +40,7 @@ async function ensureOutputDir(outputPath: string): Promise<void> {
  * @param outputPath 出力ファイルパス
  * @param inputHeaders 入力CSVのヘッダ列名配列
  * @param additionalColumns 追加する出力列名配列（output.columns から生成）
+ * @returns CsvOutputWriter インスタンス
  */
 export async function createOutputWriter(
   outputPath: string,

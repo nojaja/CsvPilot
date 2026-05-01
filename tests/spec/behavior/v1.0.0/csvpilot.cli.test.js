@@ -67,7 +67,7 @@ describe('csvpilot E2E', () => {
     it('必須引数がない場合はエラー終了する', async () => {
       const exitCode = await new Promise((resolve) => {
         cli.on('exit', ({ code }) => resolve(code));
-        cli.start({ command: process.execPath, args: [BUNDLE_PATH] });
+        cli.start({ command: process.execPath, args: [BUNDLE_PATH, 'run'] });
       });
       expect(exitCode).not.toBe(0);
     });
@@ -79,7 +79,7 @@ describe('csvpilot E2E', () => {
           cli.on('exit', ({ code }) => resolve(code));
           cli.start({
             command: process.execPath,
-            args: [BUNDLE_PATH, '-p', tmpDir, '-o', tmpDir],
+            args: [BUNDLE_PATH, 'run', '-p', tmpDir, '-o', tmpDir],
           });
         });
         // -i (input) が必須なのでエラー終了するはず
@@ -103,6 +103,7 @@ describe('csvpilot E2E', () => {
             command: process.execPath,
             args: [
               BUNDLE_PATH,
+              'run',
               '-p', path.join(tmpDir, 'nonexistent'),
               '-i', csvFile,
               '-o', path.join(tmpDir, 'output'),

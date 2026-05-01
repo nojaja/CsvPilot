@@ -13,6 +13,8 @@ export interface SessionContext {
 
 /**
  * CopilotClientを初期化して起動する
+ * @param options 実行オプション
+ * @returns 起動済み CopilotClient
  */
 export async function startClient(options: CsvPilotOptions): Promise<CopilotClient> {
   const tokenFromOption = options.token;
@@ -46,6 +48,7 @@ export async function startClient(options: CsvPilotOptions): Promise<CopilotClie
 
 /**
  * 環境変数からGitHubトークンを解決する
+ * @returns 解決されたトークン文字列、または undefined
  */
 function resolveToken(): string | undefined {
   return (
@@ -57,6 +60,11 @@ function resolveToken(): string | undefined {
 
 /**
  * 新しいCopilotSessionを作成する
+ * @param client CopilotClient
+ * @param systemMessage システムメッセージ
+ * @param model 使用モデル名（オプション）
+ * @param provider プロバイダー設定（オプション）
+ * @returns 作成した CopilotSession
  */
 export async function createCopilotSession(
   client: CopilotClient,
@@ -83,6 +91,15 @@ export async function createCopilotSession(
   return client.createSession(config);
 }
 
+/**
+ * 処理名: プロキシ環境構築
+ *
+ * 処理概要: プロキシ設定から CopilotClient 用の環境変数マップを構築する
+ *
+ * 実装理由: CopilotClient SDKのプロキシ設定は環境変数経由で行うため
+ * @param options 実行オプション
+ * @returns 環境変数マップ、または undefined
+ */
 function buildProxyEnv(options: CsvPilotOptions): Record<string, string | undefined> | undefined {
   const proxy = options.proxy;
   if (!proxy) {
@@ -115,6 +132,9 @@ function buildProxyEnv(options: CsvPilotOptions): Record<string, string | undefi
 
 /**
  * sessionにプロンプトを送信して応答を取得する
+ * @param session CopilotSession
+ * @param prompt 送信するプロンプト文字列
+ * @returns 応答テキスト
  */
 export async function sendPrompt(
   session: CopilotSession,
@@ -126,6 +146,8 @@ export async function sendPrompt(
 
 /**
  * セッションを切断する
+ * @param session 切断する CopilotSession
+ * @returns void
  */
 export async function disconnectSession(session: CopilotSession): Promise<void> {
   await session.disconnect();
@@ -133,6 +155,8 @@ export async function disconnectSession(session: CopilotSession): Promise<void> 
 
 /**
  * クライアントを停止する
+ * @param client 停止する CopilotClient
+ * @returns void
  */
 export async function stopClient(client: CopilotClient): Promise<void> {
   await client.stop();

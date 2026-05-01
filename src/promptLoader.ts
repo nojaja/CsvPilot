@@ -10,6 +10,8 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
 /**
  * ファイル名からpromptタイプを判別する
+ * @param filePath 対象ファイルパス
+ * @returns プロンプトタイプ、または null
  */
 function detectPromptType(filePath: string): PromptFileType | null {
   const basename = path.basename(filePath);
@@ -20,6 +22,9 @@ function detectPromptType(filePath: string): PromptFileType | null {
 
 /**
  * promptタイプからbasenameを生成する
+ * @param filePath 対象ファイルパス
+ * @param type プロンプトタイプ
+ * @returns basename 文字列
  */
 function buildPromptBasename(filePath: string, type: PromptFileType): string {
   const basename = path.basename(filePath);
@@ -29,6 +34,9 @@ function buildPromptBasename(filePath: string, type: PromptFileType): string {
 
 /**
  * OutputColumnDef 配列を検証する
+ * @param schema 検証対象の出力スキーマ
+ * @param filePath エラーメッセージ用のファイルパス
+ * @returns void
  */
 function validateOutputSchema(schema: OutputSchema, filePath: string): void {
   if (!schema.columns || schema.columns.length === 0) {
@@ -57,6 +65,9 @@ function validateOutputSchema(schema: OutputSchema, filePath: string): void {
 /**
  * frontmatter を解析して本文と OutputSchema に分離する（record type 用）
  * session type には呼び出さないこと。
+ * @param rawContent プロンプトファイルの生テキスト
+ * @param filePath エラーメッセージ用のファイルパス
+ * @returns 本文と OutputSchema（未定義の場合は undefined）
  */
 function parseFrontmatter(
   rawContent: string,
@@ -107,6 +118,8 @@ function parseFrontmatter(
 
 /**
  * frontmatter を取り除いた本文だけを返す（session type 用）
+ * @param rawContent プロンプトファイルの生テキスト
+ * @returns frontmatter を除いた本文文字列
  */
 function stripFrontmatter(rawContent: string): string {
   const match = FRONTMATTER_RE.exec(rawContent);
@@ -115,6 +128,8 @@ function stripFrontmatter(rawContent: string): string {
 
 /**
  * 単一のprompt.mdファイルを読み込む
+ * @param filePath 読み込むファイルパス
+ * @returns PromptFile、または対象外の場合 null
  */
 async function loadSinglePromptFile(filePath: string): Promise<PromptFile | null> {
   const type = detectPromptType(filePath);
@@ -135,6 +150,8 @@ async function loadSinglePromptFile(filePath: string): Promise<PromptFile | null
 
 /**
  * 複数のprompt.mdファイルを読み込み、session/recordに分類する
+ * @param filePaths 読み込むファイルパス配列
+ * @returns PromptFile 配列
  */
 export async function loadPromptFiles(filePaths: string[]): Promise<PromptFile[]> {
   const loaded: PromptFile[] = [];
@@ -151,6 +168,8 @@ export async function loadPromptFiles(filePaths: string[]): Promise<PromptFile[]
 
 /**
  * sessionタイプのpromptを結合してシステムメッセージを生成する
+ * @param promptFiles プロンプトファイル配列
+ * @returns システムメッセージ文字列
  */
 export function buildSystemMessage(promptFiles: PromptFile[]): string {
   return promptFiles
@@ -161,6 +180,8 @@ export function buildSystemMessage(promptFiles: PromptFile[]): string {
 
 /**
  * recordタイプのpromptファイルのみを返す
+ * @param promptFiles プロンプトファイル配列
+ * @returns recordタイプの PromptFile 配列
  */
 export function getRecordPrompts(promptFiles: PromptFile[]): PromptFile[] {
   return promptFiles.filter(f => f.type === 'record');

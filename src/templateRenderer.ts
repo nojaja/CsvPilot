@@ -1,12 +1,14 @@
-import Handlebars from 'handlebars';
+import Handlebars from 'handlebars/dist/cjs/handlebars';
 import type { CsvRecord, TemplateContext } from './types';
 
-const compiledCache = new Map<string, HandlebarsTemplateDelegate>();
+const compiledCache = new Map<string, ReturnType<typeof Handlebars.compile>>();
 
 /**
  * テンプレートをコンパイルしてキャッシュする
+ * @param templateContent テンプレート文字列
+ * @returns コンパイル済みテンプレート関数
  */
-function getCompiledTemplate(templateContent: string): HandlebarsTemplateDelegate {
+function getCompiledTemplate(templateContent: string): ReturnType<typeof Handlebars.compile> {
   const cached = compiledCache.get(templateContent);
   if (cached) return cached;
 
@@ -20,6 +22,10 @@ function getCompiledTemplate(templateContent: string): HandlebarsTemplateDelegat
  * - ヘッダー名でのアクセス: {{fieldName}}
  * - インデックスでのアクセス: {{a1}}, {{a2}}, ...
  * - レコード番号: {{NR}}
+ * @param record CSVレコード
+ * @param headers ヘッダ列名配列
+ * @param recordNumber レコード番号
+ * @returns テンプレートコンテキスト
  */
 export function buildTemplateContext(
   record: CsvRecord,
@@ -39,6 +45,11 @@ export function buildTemplateContext(
 
 /**
  * テンプレートをレコードデータで展開する
+ * @param templateContent テンプレート文字列
+ * @param record CSVレコード
+ * @param headers ヘッダ列名配列
+ * @param recordNumber レコード番号
+ * @returns 展開済みテンプレート文字列
  */
 export function renderTemplate(
   templateContent: string,

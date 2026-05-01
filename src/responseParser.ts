@@ -9,6 +9,8 @@ const CODE_BLOCK_RE = /```(?:json)?\s*([\s\S]*?)```/;
  * Copilot応答テキストをJSONオブジェクトとしてパースする。
  * Markdownコードブロックに包まれている場合は中身を取り出してパースする。
  * JSON配列はエラーとする（オブジェクトのみ受け入れ）。
+ * @param text Copilot応答テキスト
+ * @returns パース済み JSON オブジェクト
  */
 export function parseJsonResponse(text: string): Record<string, unknown> {
   const trimmed = text.trim();
@@ -36,6 +38,9 @@ export function parseJsonResponse(text: string): Record<string, unknown> {
 /**
  * ドット記法パス（例: "summary.label"）でJSONオブジェクトから値を取得する。
  * パスが存在しない場合は undefined を返す。
+ * @param obj 対象オブジェクト
+ * @param dotPath ドット記法パス
+ * @returns 取得した値、または undefined
  */
 export function extractByPath(
   obj: Record<string, unknown>,
@@ -57,6 +62,8 @@ export function extractByPath(
 /**
  * unknown値をCSVセルに格納できる文字列へ変換する。
  * 配列・オブジェクトはJSON文字列化する。
+ * @param value 変換対象値
+ * @returns CSVセル用文字列
  */
 function toCell(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -70,6 +77,12 @@ function toCell(value: unknown): string {
  * - required: true の列が欠落した場合はエラー（ファイル名・行番号付き）
  * - required: false で欠落した場合は default または空文字
  * - 宣言外のキーは無視する
+ * @param obj 応答JSONオブジェクト
+ * @param schema 出力スキーマ
+ * @param context ファイル名と行番号情報
+ * @param context.file ファイル名
+ * @param context.rowIndex 行番号
+ * @returns 列名をキー、値を値とするレコード
  */
 export function extractColumns(
   obj: Record<string, unknown>,
@@ -99,6 +112,8 @@ export function extractColumns(
 
 /**
  * OutputColumnDef 配列から出力列名の配列だけを返す
+ * @param columns 出力列定義配列
+ * @returns 出力列名配列
  */
 export function getOutputColumnNames(columns: OutputColumnDef[]): string[] {
   return columns.map(c => c.name);

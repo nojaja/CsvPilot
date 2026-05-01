@@ -43,7 +43,7 @@ npm install -g csvpilot
 ### Run without installing (npx)
 
 ```bash
-npx csvpilot -p <prompt-dir> -i <csv-file> -o <output-dir>
+npx csvpilot run -p <prompt-dir> -i <csv-file> -o <output-dir>
 ```
 
 ### From source
@@ -104,14 +104,6 @@ Run `csvpilot <command> --help` for command-specific options.
 | `init agent` | `--output <dir>` | Target directory (default: `.csvpilot`) |
 | `init agent` | `--force` | Overwrite existing template files |
 
-### Legacy mode (deprecated)
-
-The root-level options form is still supported for backward compatibility, but the `run` subcommand is preferred:
-
-```
-csvpilot [options]   # deprecated — use: csvpilot run [options]
-```
-
 ### Authentication
 
 If you are already signed in via GitHub Copilot CLI (`gh copilot`), no additional token configuration is required. The Copilot SDK will automatically pick up your credentials.
@@ -124,7 +116,7 @@ If you are not authenticated, or want to use a specific token, provide it via on
    ```
 2. CLI option:
    ```bash
-   csvpilot --token ghp_xxxxxxxxxxxx ...
+  csvpilot run --token ghp_xxxxxxxxxxxx ...
    ```
 
 ---

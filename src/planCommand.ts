@@ -31,6 +31,16 @@ export interface ExecutionPlan {
   errors: PlanIssue[];
 }
 
+/**
+ * 処理名: CSVヘッダ読み込み
+ *
+ * 処理概要: CSVファイルの1行目（ヘッダ行）のみを同期で読み込む
+ *
+ * 実装理由: plan コマンドで CSV 本文を全件読み込まずヘッダだけ取得するため
+ * @param csvPath CSVファイルパス
+ * @param delimiter CSV区切り文字
+ * @returns ヘッダ列名配列
+ */
 function readCsvHeaders(csvPath: string, delimiter: string): string[] {
   const content = fs.readFileSync(csvPath, 'utf-8');
   const records = parse(content, {
@@ -46,6 +56,16 @@ function readCsvHeaders(csvPath: string, delimiter: string): string[] {
   return records[0];
 }
 
+/**
+ * 処理名: プロンプト情報収集
+ *
+ * 処理概要: recordプロンプトファイルの出力スキーマ情報を収集し、エラーがあれば記録する
+ *
+ * 実装理由: createExecutionPlan の Cognitive Complexity を下げるために分離
+ * @param promptFiles プロンプトファイル配列
+ * @param errors エラー記録先配列
+ * @returns プロンプト情報配列（パスと出力列名）
+ */
 function collectPromptInfo(promptFiles: PromptFile[], errors: PlanIssue[]): Array<{ path: string; columns: string[] }> {
   const info: Array<{ path: string; columns: string[] }> = [];
   const records = getRecordPrompts(promptFiles);
@@ -68,6 +88,91 @@ function collectPromptInfo(promptFiles: PromptFile[], errors: PlanIssue[]): Arra
   return info;
 }
 
+/**
+ * 処理名: 単一CSV計画出力生成
+ *
+ * 処理概要: 1つのCSVに対する計画出力（PlannedOutput）を生成し、衝突があればエラーを記録する
+ *
+ * 実装理由: createExecutionPlan の Cognitive Complexity を下げるために分離
+ * @param csvPath 入力CSVファイルパス
+ * @param prompt プロンプト情報
+ * @param prompt.path プロンプトファイルパス
+ * @param prompt.columns 出力列名配列
+ * @param headers CSVヘッダ列名配列
+ * @param errors エラー記録先配列
+ * @param outputDir 出力先ディレクトリ
+ * @returns PlannedOutput（衝突エラー時は null）
+ */
+function buildPlannedOutput(
+  csvPath: string,
+  prompt: { path: string; columns: string[] },
+  headers: string[],
+  errors: PlanIssue[],
+  outputDir: string
+): PlannedOutput | null {
+  const collision = prompt.columns.find(c => headers.includes(c));
+  if (collision) {
+    errors.push({
+      code: 'HEADER_COLLISION',
+      message: `出力列名 "${collision}" が入力ヘッダと衝突: ${csvPath} / ${prompt.path}`,
+    });
+    return null;
+  }
+  const csvBasename = path.basename(csvPath, '.csv');
+  const promptBasename = path.basename(prompt.path).replace('.record.prompt.md', '');
+  return {
+    input: csvPath,
+    prompt: prompt.path,
+    output: buildOutputPath(outputDir, csvBasename, promptBasename),
+    additionalColumns: prompt.columns,
+  };
+}
+
+/**
+ * 処理名: CSV別計画出力一覧生成
+ *
+ * 処理概要: 1つのCSVとプロンプト一覧の組み合わせ計画を生成する
+ *
+ * 実装理由: createExecutionPlan の Cognitive Complexity を下げるために分離
+ * @param csvPath 入力CSVファイルパス
+ * @param promptInfo プロンプト情報配列
+ * @param options 実行オプション
+ * @param errors エラー記録先配列
+ * @returns PlannedOutput 配列
+ */
+function buildPlannedOutputsForCsv(
+  csvPath: string,
+  promptInfo: Array<{ path: string; columns: string[] }>,
+  options: CsvPilotOptions,
+  errors: PlanIssue[]
+): PlannedOutput[] {
+  let headers: string[];
+  try {
+    headers = readCsvHeaders(csvPath, options.delimiter);
+  } catch (err) {
+    errors.push({
+      code: 'CSV_HEADER_READ_FAILED',
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+  const results: PlannedOutput[] = [];
+  for (const prompt of promptInfo) {
+    const output = buildPlannedOutput(csvPath, prompt, headers, errors, options.output);
+    if (output) results.push(output);
+  }
+  return results;
+}
+
+/**
+ * 処理名: 実行計画生成
+ *
+ * 処理概要: CSV/プロンプト/オプションから実行計画（ExecutionPlan）を生成する
+ *
+ * 実装理由: LLM呼び出しなしで実行前に失敗リスクを確定し、AIエージェントが安全に操作できるようにするため
+ * @param options 実行オプション
+ * @returns 実行計画
+ */
 export async function createExecutionPlan(options: CsvPilotOptions): Promise<ExecutionPlan> {
   const errors: PlanIssue[] = [];
   const warnings: PlanIssue[] = [];
@@ -83,38 +188,9 @@ export async function createExecutionPlan(options: CsvPilotOptions): Promise<Exe
   }
 
   const plannedOutputs: PlannedOutput[] = [];
-
   for (const csvPath of csvPaths) {
-    let headers: string[] = [];
-    try {
-      headers = readCsvHeaders(csvPath, options.delimiter);
-    } catch (err) {
-      errors.push({
-        code: 'CSV_HEADER_READ_FAILED',
-        message: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
-
-    for (const prompt of promptInfo) {
-      const collision = prompt.columns.find(c => headers.includes(c));
-      if (collision) {
-        errors.push({
-          code: 'HEADER_COLLISION',
-          message: `出力列名 "${collision}" が入力ヘッダと衝突: ${csvPath} / ${prompt.path}`,
-        });
-        continue;
-      }
-
-      const csvBasename = path.basename(csvPath, '.csv');
-      const promptBasename = path.basename(prompt.path).replace('.record.prompt.md', '');
-      plannedOutputs.push({
-        input: csvPath,
-        prompt: prompt.path,
-        output: buildOutputPath(options.output, csvBasename, promptBasename),
-        additionalColumns: prompt.columns,
-      });
-    }
+    const outputs = buildPlannedOutputsForCsv(csvPath, promptInfo, options, errors);
+    plannedOutputs.push(...outputs);
   }
 
   if (csvPaths.length === 0) {
@@ -134,11 +210,30 @@ export async function createExecutionPlan(options: CsvPilotOptions): Promise<Exe
   };
 }
 
+/**
+ * 処理名: 計画ファイル保存
+ *
+ * 処理概要: 実行計画をJSONファイルに保存する
+ *
+ * 実装理由: 計画を保存して run コマンドで再利用できるようにするため
+ * @param planPath 保存先ファイルパス
+ * @param plan 実行計画
+ * @returns void
+ */
 export function writePlanFile(planPath: string, plan: ExecutionPlan): void {
   fs.mkdirSync(path.dirname(planPath), { recursive: true });
   fs.writeFileSync(planPath, JSON.stringify(plan, null, 2), 'utf-8');
 }
 
+/**
+ * 処理名: 計画テキスト変換
+ *
+ * 処理概要: ExecutionPlan をテキスト形式に変換する
+ *
+ * 実装理由: --format text モードでの出力に使用するため
+ * @param plan 実行計画
+ * @returns テキスト形式の計画内容
+ */
 export function toPlanText(plan: ExecutionPlan): string {
   const lines: string[] = [];
   lines.push(`[plan] id: ${plan.planId}`);
