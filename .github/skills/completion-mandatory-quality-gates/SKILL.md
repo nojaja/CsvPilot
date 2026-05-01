@@ -1,4 +1,4 @@
----
+﻿---
 name: completion-mandatory-quality-gates
 description: 作業完了時に必ず品質ゲートを全通過させるためのSkill。ビルド・依存関係チェック・テスト・Lintを例外なく実行し、設定変更や除外を禁止する。
 ---
@@ -9,7 +9,9 @@ description: 作業完了時に必ず品質ゲートを全通過させるため�
 
 ## 必須実行コマンド（順不同可、全て成功が条件）
 - `npm run build`
+- `npm run type-check`
 - `npm run depcruise`
+- `npm run cpd`
 - `npm run test:ci`
 - `npm run lint`
 - `npm run docs`
@@ -19,7 +21,7 @@ description: 作業完了時に必ず品質ゲートを全通過させるため�
 - いかなる理由でも実行対象からの除外・スキップを禁止する。
 - 期限付き・一時的・例外承認付きであっても品質ゲートの例外運用を禁止する。
 - 実行結果は成功が確認できるまで対応を継続し、失敗時は設定を変えずに修正して再実行する。
-- 作業完了の宣言は、上記5コマンドが全て成功した後のみ行うこと。
+- 作業完了の宣言は、上記7コマンドが全て成功した後のみ行うこと。
 
 ## ⛔ Lint 抑制・設定改変の完全禁止
 
@@ -42,7 +44,9 @@ ESLint エラーは**必ずソースコードを修正**して解消すること
 ## ルール概要 — Checklist
 
 * Unit テストカバレッジ ≥ 50%
+* TypeScript 型エラーなし（`tsc --noEmit`）
 * ESLint エラーなし（complexity ルール含む）
+* jscpd による重複コード検出なし（min-lines 5 / min-tokens 50 / threshold 0）
 * typedoc で Markdown ドキュメント生成
 * CI で全ての品質ゲートを通過
 * 依存関係ルール違反なし
@@ -142,10 +146,13 @@ ESLint エラーは**必ずソースコードを修正**して解消すること
 
 ## 5. テストカバレッジ & CI ゲート
 - `npm run test:ci`（jest --coverage、50% 未満で失敗）。
+- `npm run type-check`（tsc --noEmit、型エラーで失敗）。
 - `npm run lint`（ESLint エラーで失敗）。
 - `npm run depcruise`（dependency-cruiser 依存違反で失敗）。
+- `npm run cpd`（jscpd 重複検出で失敗、min-lines 5 / min-tokens 50 / threshold 0）。
 - `npm run docs`（typedoc Markdown 生成失敗で失敗）。
 - `npm run depcruise` に `|| exit 0` などの失敗回避を含めない。
+- `npm run cpd` に失敗回避オプションを含めない。
 
 ## 6. ESLint ルール（必須要件）
 
@@ -153,42 +160,14 @@ ESLint エラーは**必ずソースコードを修正**して解消すること
 - 可読性・保守性を重視。
 - 複雑度を機械的に制限。
 - ドキュメント未記載をエラー扱い。
+- 文字列・関数の重複をエラー扱い。
 
 ### 必須ルール
 - Cognitive Complexity ≤ 10。
+- 重複文字列リテラル: `sonarjs/no-duplicate-string`（threshold: 3）。
+- 同一実装関数: `sonarjs/no-identical-functions`。
 - JSDoc 必須（param / returns 必須）。
 - フレームワーク利用時は parser / plugin の override を追加する。
-
-```js
-// eslint.config.js
-module.exports = {
-  extends: [
-    'eslint:recommended',
-    'plugin:sonarjs/recommended',
-    'plugin:jsdoc/recommended'
-  ],
-  plugins: ['sonarjs', 'jsdoc'],
-  rules: {
-    'sonarjs/cognitive-complexity': ['error', 10],
-    'no-unused-vars': ['warn'],
-
-    'jsdoc/require-jsdoc': [
-      'error',
-      {
-        require: {
-          FunctionDeclaration: true,
-          MethodDefinition: true,
-          ClassDeclaration: true,
-          ArrowFunctionExpression: true,
-          FunctionExpression: true
-        }
-      }
-    ],
-    'jsdoc/require-param': 'error',
-    'jsdoc/require-returns': 'error'
-  }
-};
-```
 
 ### ⛔ Lint 抑制・設定改変の完全禁止
 
@@ -264,8 +243,10 @@ function saveTasks(...) {}
 ### 最終ゲート
 
 * `npm run test:ci` 成功
+* `npm run type-check` 型エラーなし
 * `npm run lint` エラーなし
 * `npm run depcruise` 違反なし
+* `npm run cpd` 重複検出なし
 * `npm run build` 成功
 * `npm run docs` 成功
 * `docs/spec/vx.y.z/` に仕様または監査記録があり、受け入れ条件と設計判断が記載されていること

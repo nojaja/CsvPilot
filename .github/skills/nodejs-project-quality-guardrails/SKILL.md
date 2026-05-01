@@ -1,4 +1,4 @@
----
+﻿---
 name: nodejs-project-quality-guardrails
 description: 再利用可能なNode.js/TypeScript品質担保ガードレールを定義し、テストカバレッジ・Lint・ドキュメント・設計原則・CIゲートを網羅して、生成・修正時に一貫した高品質を維持する。
 ---
@@ -39,8 +39,11 @@ AI エージェント（GitHub Copilot / Claude / OpenAI Codex）に理解させ
 ### 3. 静的解析
 - ESLint（flat-config）
   - TypeScript, sonarjs, jsdoc 最小構成
+  - `sonarjs/no-duplicate-string`（閾値: 3回以上で違反）と `sonarjs/no-identical-functions` を有効化
 - dependency-cruiser を使い依存関係ルールを強制
 - `npm run depcruise` では `|| exit 0` などの失敗回避を禁止する
+- jscpd によるコードブロック重複検出
+  - `--min-lines 5` / `--min-tokens 50` / `--threshold 0`（1件でも失敗）
 
 ---
 
@@ -112,8 +115,10 @@ AI エージェント（GitHub Copilot / Claude / OpenAI Codex）に理解させ
 ## テストカバレッジ & CI ゲート
 
 - `npm run test:ci` で `jest --coverage` を実行し、coverage 50% 未満は失敗
+- `npm run type-check` で `tsc --noEmit` を実行し、型エラーがあれば CI を失敗させる
 - `npm run lint` で ESLint を実行し、エラーがあれば CI を失敗させる
 - `npm run depcruise` の違反があれば CI を失敗させる
+- `npm run cpd` で jscpd を実行し、重複コード検出時は CI を失敗させる
 - `npm run docs` で typedoc の Markdown 生成を実行し、失敗時は CI を失敗させる
 - CI でのテスト実行は `npm run test` ではなく `npm run test:ci` を利用する
 - `npm run depcruise` に失敗回避オプションを含めてはならない
@@ -123,48 +128,23 @@ AI エージェント（GitHub Copilot / Claude / OpenAI Codex）に理解させ
 ## CI/品質ゲート要件
 
 1. `npm run test` が成功すること
-2. `npm run lint` がエラーを出さないこと
-3. `npm run depcruise` が違反なし
-4. `npm run build` が成功しバンドル生成されること
-5. CI の自動テストは `npm run test:ci` を利用すること
-6. `npm run docs` が成功し、`docs/typedoc-md/` が生成されること
-7. `docs/spec/vx.y.z/` に仕様または監査記録が存在し、受け入れ条件と設計判断が記載されていること
+2. `npm run type-check` が型エラーなし（`tsc --noEmit`、esbuild/webpack 等でビルドする場合も必須）
+3. `npm run lint` がエラーを出さないこと
+4. `npm run depcruise` が違反なし
+5. `npm run cpd` が重複コード検出なし（jscpd、min-lines 5 / min-tokens 50 / threshold 0）
+6. `npm run build` が成功しバンドル生成されること
+7. CI の自動テストは `npm run test:ci` を利用すること
+8. `npm run docs` が成功し、`docs/typedoc-md/` が生成されること
+9. `docs/spec/vx.y.z/` に仕様または監査記録が存在し、受け入れ条件と設計判断が記載されていること
 
 ---
 
 ## ESLint ルール / 必須条件
 
 - Cognitive Complexity ≤ 10
+- 文字列重複: `sonarjs/no-duplicate-string`（threshold: 3）
+- 関数重複: `sonarjs/no-identical-functions`
 
-```js
-// eslint.config.js
-module.exports = {
-  extends: [
-    'eslint:recommended',
-    'plugin:sonarjs/recommended',
-    'plugin:jsdoc/recommended'
-  ],
-  plugins: ['sonarjs', 'jsdoc'],
-  rules: {
-    'sonarjs/cognitive-complexity': ['error', 10],
-    'no-unused-vars': ['warn'],
-    'jsdoc/require-jsdoc': [
-      'error',
-      {
-        require: {
-          FunctionDeclaration: true,
-          MethodDefinition: true,
-          ClassDeclaration: true,
-          ArrowFunctionExpression: true,
-          FunctionExpression: true
-        }
-      }
-    ],
-    'jsdoc/require-param': 'error',
-    'jsdoc/require-returns': 'error'
-  }
-};
-```
 - フレームワーク利用時は parser / plugin の override を追加する（例: Vue なら `vue-eslint-parser` と `eslint-plugin-vue`）
 - JSDoc コメント必須
 - JSDoc 内で param / returns を記載
@@ -219,6 +199,22 @@ function saveTasks(...) {}
 
 ---
 
+## jscpd（コード重複検出）
+
+- コードブロック単位の重複（コピペ）を検出するため jscpd を導入する
+- `package.json` に `"cpd": "jscpd src --min-lines 5 --min-tokens 50 --threshold 0"` を定義する
+- threshold 0 は「1件でも重複があれば失敗」を意味する
+- 重複が検出された場合はコードを共通化・抽象化してから再実行する
+- `|| exit 0` などの失敗回避は禁止する
+
+| オプション | 意味 | 設定値 |
+|---|---|---|
+| `--min-lines` | 重複とみなす最小行数 | 5 |
+| `--min-tokens` | 重複とみなす最小トークン数 | 50 |
+| `--threshold` | 失敗とみなす重複率（%）| 0（1件でも失敗） |
+
+---
+
 ## テスト & 受け入れ基準
 
 ### テスト要件
@@ -236,4 +232,4 @@ function saveTasks(...) {}
 - `npm run test` 成功
 - `npm run lint` エラーなし
 - `npm run build` 成功
-- `dist/csvpilot.bundle.js` が生成されていること
+- `dist/index.bundle.js` が生成されていること

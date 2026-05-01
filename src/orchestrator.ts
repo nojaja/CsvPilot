@@ -366,8 +366,7 @@ export async function run(options: CsvPilotOptions): Promise<void> {
       arrayBuffers: toMByte(memoryUsage.arrayBuffers),
     });
     console.log(
-      `process statistics - Execution time: ${endTimeArray[0]}s ${
-        endTimeArray[1] / 1000000
+      `process statistics - Execution time: ${endTimeArray[0]}s ${endTimeArray[1] / 1000000
       }ms, memoryUsage: ${memoryUsageInfo}`
     );
   });

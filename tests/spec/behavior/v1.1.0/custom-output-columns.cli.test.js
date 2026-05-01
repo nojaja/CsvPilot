@@ -53,7 +53,7 @@ describe('csvpilot v1.1.0 カスタム出力カラム E2E', () => {
   });
 
   afterEach(async () => {
-    await cli.sendCtrlC().catch(() => {});
+    await cli.sendCtrlC().catch(() => { });
     cli.dispose();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

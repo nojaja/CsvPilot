@@ -51,10 +51,10 @@ export async function runDoctor(options: CsvPilotOptions): Promise<DoctorReport>
     token
       ? { item: 'token', status: 'pass' }
       : {
-          item: 'token',
-          status: 'warn',
-          remediation: '--token または GITHUB_TOKEN を設定してください。',
-        }
+        item: 'token',
+        status: 'warn',
+        remediation: '--token または GITHUB_TOKEN を設定してください。',
+      }
   );
 
   const plan = await createExecutionPlan(options);

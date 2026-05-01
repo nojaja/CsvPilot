@@ -12,6 +12,40 @@ export interface CsvParseResult {
 }
 
 /**
+ * 処理名: CSV行データハンドラ生成
+ *
+ * 処理概要:
+ * CSVパーサの `data` イベントハンドラを生成する。
+ * 1行目をヘッダとして取り込み、2行目以降をレコードに変換してコールバックへ渡す。
+ *
+ * 実装理由:
+ * streamAllRecords と streamCsvRows で同一のヘッダ解析・レコード変換ロジックが
+ * 重複するため、共通ファクトリ関数として抽出し重複を排除する。
+ *
+ * @param headers ヘッダ格納先配列（参照渡し）
+ * @param onRecord レコード生成後に呼び出すコールバック
+ * @returns csv-parse の data イベント用ハンドラ
+ */
+function createCsvDataHandler(
+  headers: string[],
+  onRecord: (_record: CsvRecord) => void
+): (_row: string[]) => void {
+  let isFirstRow = true;
+  return (row: string[]) => {
+    if (isFirstRow) {
+      headers.push(...row);
+      isFirstRow = false;
+      return;
+    }
+    const record: CsvRecord = {};
+    headers.forEach((h, i) => {
+      record[h] = row[i] ?? '';
+    });
+    onRecord(record);
+  };
+}
+
+/**
  * CSVファイルをストリーミングで全レコード読み込む
  * @param filePath 対象CSVファイルパス
  * @param delimiter CSV区切り文字
@@ -24,22 +58,12 @@ async function streamAllRecords(
   return new Promise((resolve, reject) => {
     const headers: string[] = [];
     const records: CsvRecord[] = [];
-    let isFirstRow = true;
 
     const parser = parse({ delimiter, trim: true });
 
-    parser.on('data', (row: string[]) => {
-      if (isFirstRow) {
-        headers.push(...row);
-        isFirstRow = false;
-        return;
-      }
-      const record: CsvRecord = {};
-      headers.forEach((h, i) => {
-        record[h] = row[i] ?? '';
-      });
+    parser.on('data', createCsvDataHandler(headers, (record) => {
       records.push(record);
-    });
+    }));
 
     parser.on('end', () => resolve({ headers, records }));
     parser.on('error', reject);
@@ -118,24 +142,14 @@ export function streamCsvRows(
   return new Promise((resolve, reject) => {
     const headers: string[] = [];
     let rowIndex = 0;
-    let isFirstRow = true;
     const promises: Promise<void>[] = [];
 
     const parser = parse({ delimiter, trim: true });
 
-    parser.on('data', (row: string[]) => {
-      if (isFirstRow) {
-        headers.push(...row);
-        isFirstRow = false;
-        return;
-      }
-      const record: CsvRecord = {};
-      headers.forEach((h, i) => {
-        record[h] = row[i] ?? '';
-      });
+    parser.on('data', createCsvDataHandler(headers, (record) => {
       rowIndex++;
       promises.push(onRow(record, headers, rowIndex));
-    });
+    }));
 
     parser.on('end', () => {
       Promise.all(promises)

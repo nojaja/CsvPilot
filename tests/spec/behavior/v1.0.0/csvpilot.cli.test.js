@@ -44,7 +44,7 @@ describe('csvpilot E2E', () => {
   });
 
   afterEach(async () => {
-    await cli.sendCtrlC().catch(() => {});
+    await cli.sendCtrlC().catch(() => { });
     cli.dispose();
   });
 
