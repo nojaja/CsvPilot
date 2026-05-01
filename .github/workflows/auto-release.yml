@@ -1,9 +1,7 @@
 name: Auto Release on Version Change
 
-# ---------------------------------------------------------
-# package.json の version 変更を検出し、Gitタグ作成・
-# GitHub Release 作成・npm 公開を自動化するワークフロー
-# ---------------------------------------------------------
+# package.json の version 変更を検知し、タグ作成を必須実行したうえで
+# 選択された公開先（npm / GitHub Release）へ自動公開するワークフロー
 on:
   push:
     branches: ['main']
@@ -14,28 +12,25 @@ env:
   TAG_PREFIX: 'v'
   PACKAGE_PATH: 'package.json'
   CHANGELOG_PATH: 'CHANGELOG.md'
-  NODE_VERSION: '20.x'
+  NODE_VERSION: '22.x'
 
-# タグ作成・GitHub Release に必要な書き込み権限（ジョブ個別に上書き可能）
 permissions:
   contents: write
 
 jobs:
-  # ----------------------------------------------------------
-  # 1. package.json の version 変更を検出してタグ名を決定
-  # ----------------------------------------------------------
   check-version:
+    # 現在 version と「最新のバージョンタグ」が指す version を比較する
     runs-on: ubuntu-latest
     outputs:
       version_changed: ${{ steps.check.outputs.changed }}
       tag_name: ${{ steps.check.outputs.tag_name }}
       tag_exists: ${{ steps.check.outputs.tag_exists }}
+      latest_tag: ${{ steps.previous.outputs.latest_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 現在コミットの version を取得
       - name: 現在のバージョンを取得
         id: current
         run: |
@@ -43,22 +38,26 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "現在のバージョン: $VERSION"
 
-      # 直前コミットの version を取得（初コミットの場合は 0.0.0 扱い）
-      - name: 直前コミットのバージョンを取得
+      - name: 最新バージョンタグ側のバージョンを取得
         id: previous
         run: |
-          git show HEAD~1:${PACKAGE_PATH} > /tmp/prev-package.json 2>/dev/null || true
+          LATEST_TAG=$(git tag -l "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | head -n 1)
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+          if [ -n "$LATEST_TAG" ]; then
+            git show "$LATEST_TAG:${PACKAGE_PATH}" > /tmp/prev-package.json 2>/dev/null || true
+          fi
+
           if [ -f /tmp/prev-package.json ]; then
             PREV_VERSION=$(node -p "require('/tmp/prev-package.json').version")
             echo "version=$PREV_VERSION" >> $GITHUB_OUTPUT
-            echo "前回のバージョン: $PREV_VERSION"
+            echo "最新タグ($LATEST_TAG)のバージョン: $PREV_VERSION"
           else
             echo "version=0.0.0" >> $GITHUB_OUTPUT
-            echo "前回のバージョンが見つかりません（初回コミット扱い）"
+            echo "比較対象タグが見つからないため初回リリース扱い"
           fi
 
-      # バージョン比較・タグ重複チェック
-      - name: バージョン変更チェックとタグ存在確認
+      - name: バージョン差分とタグ存在を判定
         id: check
         run: |
           CURRENT_VERSION="${{ steps.current.outputs.version }}"
@@ -70,38 +69,32 @@ jobs:
             echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
             echo "✅ バージョンが変更されました: $PREVIOUS_VERSION → $CURRENT_VERSION"
 
-            # 同名タグが既に存在する場合はスキップフラグを立てる
             if git ls-remote --exit-code --tags origin "$TAG_NAME" >/dev/null 2>&1; then
               echo "tag_exists=true" >> $GITHUB_OUTPUT
-              echo "⚠️ タグ $TAG_NAME は既に存在します（タグ作成をスキップ）"
+              echo "⚠️ タグ $TAG_NAME は既に存在します"
             else
               echo "tag_exists=false" >> $GITHUB_OUTPUT
-              echo "✨ 新しいタグ $TAG_NAME を作成します"
+              echo "✨ 新規タグ $TAG_NAME を作成します"
             fi
           else
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
             echo "tag_exists=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ バージョンに変更はありません"
+            echo "ℹ️ バージョン差分はありません"
           fi
 
-  # ----------------------------------------------------------
-  # 2. Gitタグを作成して push（version 変更時・タグ未存在時のみ）
-  # ----------------------------------------------------------
   create-tag:
-    needs: check-version
-    if: >
-      github.event_name == 'push' &&
-      needs.check-version.outputs.version_changed == 'true' &&
-      needs.check-version.outputs.tag_exists == 'false'
+    # 公開先に関係なく、version 変更時は必ずこのジョブを実行する
+    needs: [check-version, test]
+    if: github.event_name == 'push' && needs.check-version.outputs.version_changed == 'true' && needs.test.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # アノテーション付きタグを作成し、リモートへ push
-      - name: Gitタグを作成して push
+      - name: タグを作成してpush（未作成時のみ）
+        if: needs.check-version.outputs.tag_exists == 'false'
         run: |
           TAG_NAME="${{ needs.check-version.outputs.tag_name }}"
           git config user.name "github-actions[bot]"
@@ -110,10 +103,14 @@ jobs:
           git push origin "$TAG_NAME"
           echo "✅ タグ $TAG_NAME を作成しました"
 
-  # ----------------------------------------------------------
-  # 3. Node.js マトリクステスト (22.x) — npm 公開前の品質ゲート
-  # ----------------------------------------------------------
+      - name: タグ作成スキップを記録
+        if: needs.check-version.outputs.tag_exists == 'true'
+        run: |
+          echo "ℹ️ タグ ${{ needs.check-version.outputs.tag_name }} は既存のため作成をスキップしました"
+
   test:
+    # npm 公開前の固定マトリクステスト（node -v=v22.21.0 / engines.node未定義のため 22.x を採用）
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -129,42 +126,75 @@ jobs:
       - name: 依存パッケージをインストール
         run: npm ci
 
-      # 単体テストを実行
       - name: テストを実行
         run: npm test
 
-  # ----------------------------------------------------------
-  # 4. GitHub Release を作成（CHANGELOG.md から該当バージョンを抽出）
-  # ----------------------------------------------------------
-  create-release:
-    needs: [check-version, create-tag]
-    if: >
-      github.event_name == 'push' &&
-      needs.check-version.outputs.version_changed == 'true'
+  publish-npm:
+    # npm へ公開（Trusted Publishing）
+    needs: [check-version, create-tag, test]
+    if: github.event_name == 'push' && needs.check-version.outputs.version_changed == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node.js をセットアップ（npmjs レジストリ）
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org/
+
+      - name: npm を最新版へ更新
+        run: npm install -g npm@latest
+
+      - name: 依存パッケージをインストール
+        run: npm ci
+
+      - name: プロダクションビルド
+        run: npm run build
+
+      - name: npm publish（OIDC Trusted Publishing）
+        run: npm publish --access public
+
+      # NPM.js Trusted Publisher 登録手順:
+      # 1) NPM.js の対象パッケージ設定で Trusted Publisher を開く
+      # 2) Provider は GitHub Actions を選択
+      # 3) Organization or user: nojaja
+      # 4) Repository: CsvPilot
+      # 5) Workflow filename: auto-release.yml
+      # 6) Environment name: 空欄
+
+  create-release:
+    # GitHub Release を作成（タグ作成ジョブ後）
+    needs: [check-version, create-tag]
+    if: github.event_name == 'push' && needs.check-version.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # CHANGELOG.md の該当バージョンセクションを Release 本文として抽出
-      - name: 該当バージョンの変更履歴を抽出
+      - name: CHANGELOG から該当バージョン本文を抽出
         id: changelog
         run: |
           TAG_NAME="${{ needs.check-version.outputs.tag_name }}"
-          VERSION_NO_PREFIX="${TAG_NAME#${{ env.TAG_PREFIX }}}"
+          VERSION_NO_PREFIX="${TAG_NAME#${TAG_PREFIX}}"
 
-          if [ -f "${{ env.CHANGELOG_PATH }}" ]; then
-            START_LINE=$(grep -n "## \[$VERSION_NO_PREFIX\]" "${{ env.CHANGELOG_PATH }}" | head -1 | cut -d: -f1)
+          if [ -f "$CHANGELOG_PATH" ]; then
+            START_LINE=$(grep -n "## \[$VERSION_NO_PREFIX\]" "$CHANGELOG_PATH" | head -1 | cut -d: -f1)
 
             if [ -n "$START_LINE" ]; then
-              NEXT_LINE=$(tail -n +$((START_LINE + 1)) "${{ env.CHANGELOG_PATH }}" | grep -n "## \[" | head -1 | cut -d: -f1)
+              NEXT_LINE=$(tail -n +$((START_LINE + 1)) "$CHANGELOG_PATH" | grep -n "## \[" | head -1 | cut -d: -f1)
 
               if [ -n "$NEXT_LINE" ]; then
                 END_LINE=$((START_LINE + NEXT_LINE - 1))
-                CONTENT=$(sed -n "${START_LINE},${END_LINE}p" "${{ env.CHANGELOG_PATH }}" | tail -n +2)
+                CONTENT=$(sed -n "${START_LINE},${END_LINE}p" "$CHANGELOG_PATH" | tail -n +2)
               else
-                CONTENT=$(tail -n +$((START_LINE + 1)) "${{ env.CHANGELOG_PATH }}")
+                CONTENT=$(tail -n +$((START_LINE + 1)) "$CHANGELOG_PATH")
               fi
 
               {
@@ -179,7 +209,6 @@ jobs:
             echo "content=バージョン $VERSION_NO_PREFIX のリリース" >> $GITHUB_OUTPUT
           fi
 
-      # softprops/action-gh-release で GitHub Release を作成
       - name: GitHub Release を作成
         uses: softprops/action-gh-release@v2
         env:
@@ -190,40 +219,3 @@ jobs:
           body: ${{ steps.changelog.outputs.content }}
           draft: false
           prerelease: false
-
-  # ----------------------------------------------------------
-  # 5. npm へ公開（Trusted Publishing / テスト・タグ作成完了後）
-  # ----------------------------------------------------------
-  publish-npm:
-    needs: [check-version, create-tag, test]
-    if: >
-      github.event_name == 'push' &&
-      needs.check-version.outputs.version_changed == 'true'
-    runs-on: ubuntu-latest
-    # Trusted Publishing に必要な最小権限
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      # npmjs.org レジストリを指定して Node.js をセットアップ
-      - name: Node.js をセットアップ（npmレジストリ設定）
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: https://registry.npmjs.org/
-
-      - name: npm を最新版へアップデート
-        run: npm install -g npm@latest
-
-      - name: 依存パッケージをインストール
-        run: npm ci
-
-      # webpack でバンドルビルドを実行
-      - name: プロダクションビルドを実行
-        run: npm run build
-
-      # OIDC Trusted Publishing で NPM_TOKEN 不要
-      - name: npm へ公開（Trusted Publishing）
-        run: npm publish --access public

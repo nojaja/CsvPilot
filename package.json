@@ -1,9 +1,10 @@
 {
     "name": "csvpilot",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "type": "commonjs",
-    "description": "CLI tool to batch-process large CSV datasets using the GitHub Copilot SDK with a unified prompt template",
+    "description": "CLI for batch CSV processing with GitHub Copilot SDK and reusable prompts",
     "main": "dist/csvpilot.bundle.js",
+    "types": "dist/index.d.ts",
     "bin": {
         "csvpilot": "./dist/csvpilot.bundle.js"
     },
@@ -77,6 +78,10 @@
         "webpack-cli": "^5.1.4"
     },
     "files": [
-        "dist/csvpilot.bundle.js"
+        "dist",
+        "package.json",
+        "README.md",
+        "README_ja.md",
+        "LICENSE"
     ]
 }
