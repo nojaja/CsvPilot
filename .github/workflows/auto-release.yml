@@ -1,7 +1,7 @@
 name: Auto Release on Version Change
 
 # package.json の version 変更を検知し、タグ作成を必須実行したうえで
-# 選択された公開先（npm / GitHub Release）へ自動公開するワークフロー
+# 選択済み公開先（npm / GitHub Release）へ自動公開するワークフロー
 on:
   push:
     branches: ['main']
@@ -12,6 +12,9 @@ env:
   TAG_PREFIX: 'v'
   PACKAGE_PATH: 'package.json'
   CHANGELOG_PATH: 'CHANGELOG.md'
+  # node -v (このセッションで実行): v22.21.0
+  # package.json の engines.node: 未定義
+  # 上記より固定値として 22.x を採用
   NODE_VERSION: '22.x'
 
 permissions:
@@ -83,38 +86,13 @@ jobs:
             echo "ℹ️ バージョン差分はありません"
           fi
 
-  create-tag:
-    # 公開先に関係なく、version 変更時は必ずこのジョブを実行する
-    needs: [check-version, test]
-    if: github.event_name == 'push' && needs.check-version.outputs.version_changed == 'true' && needs.test.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: タグを作成してpush（未作成時のみ）
-        if: needs.check-version.outputs.tag_exists == 'false'
-        run: |
-          TAG_NAME="${{ needs.check-version.outputs.tag_name }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-          git push origin "$TAG_NAME"
-          echo "✅ タグ $TAG_NAME を作成しました"
-
-      - name: タグ作成スキップを記録
-        if: needs.check-version.outputs.tag_exists == 'true'
-        run: |
-          echo "ℹ️ タグ ${{ needs.check-version.outputs.tag_name }} は既存のため作成をスキップしました"
-
   test:
-    # npm 公開前の固定マトリクステスト（node -v=v22.21.0 / engines.node未定義のため 22.x を採用）
-    if: github.event_name == 'push'
+    # npm 公開前の固定マトリクステスト
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [22.x]
+        # package.json の engines.node と node -v 実測結果から確定した固定値
+        node-version: ['22.x']
     steps:
       - uses: actions/checkout@v4
 
@@ -129,8 +107,33 @@ jobs:
       - name: テストを実行
         run: npm test
 
+  create-tag:
+    # npm 公開ありのため、test 成功後にタグ作成ジョブを実行
+    needs: [check-version, test]
+    if: github.event_name == 'push' && needs.check-version.outputs.version_changed == 'true' && needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: タグを作成して push（未作成時のみ）
+        if: needs.check-version.outputs.tag_exists == 'false'
+        run: |
+          TAG_NAME="${{ needs.check-version.outputs.tag_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "✅ タグ $TAG_NAME を作成しました"
+
+      - name: タグ作成スキップを記録
+        if: needs.check-version.outputs.tag_exists == 'true'
+        run: |
+          echo "ℹ️ タグ ${{ needs.check-version.outputs.tag_name }} は既存のため作成をスキップしました"
+
   publish-npm:
-    # npm へ公開（Trusted Publishing）
+    # npm へ公開（OIDC Trusted Publishing）
     needs: [check-version, create-tag, test]
     if: github.event_name == 'push' && needs.check-version.outputs.version_changed == 'true'
     runs-on: ubuntu-latest
@@ -146,8 +149,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org/
 
-      - name: npm を最新版へ更新
-        run: npm install -g npm@latest
+      # ランナー側 npm 不整合（Cannot find module 'promise-retry'）が発生した場合のみ有効化:
+      # - name: npm ワークアラウンド（固定版）
+      #   run: npm i -g npm@10.8.2
 
       - name: 依存パッケージをインストール
         run: npm ci
@@ -155,7 +159,7 @@ jobs:
       - name: プロダクションビルド
         run: npm run build
 
-      - name: npm publish（OIDC Trusted Publishing）
+      - name: npm publish（Trusted Publishing）
         run: npm publish --access public
 
       # NPM.js Trusted Publisher 登録手順:
