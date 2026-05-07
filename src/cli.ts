@@ -33,7 +33,7 @@ export function createCli(): Command {
     .option('-p, --prompts <paths...>', 'prompt.mdファイルまたはフォルダ（複数可）')
     .option('-i, --input <paths...>', 'CSVファイルまたはフォルダ（複数可）')
     .option('-q, --query <query>', 'RBQLクエリ（省略時は全行処理）')
-    .option('-o, --output <dir>', '出力先フォルダ')
+    .option('-o, --output <dir>', '出力先フォルダまたはCSVファイルパス')
     .option('-m, --mode <mode>', 'セッションモード: whole | folder | file | record')
     .option('--token <token>', 'GitHub認証トークン（省略時は環境変数）')
     .option('--model <model>', '使用モデル名')
@@ -42,6 +42,7 @@ export function createCli(): Command {
 
   addRunOptions(program.command('run').description('CSV処理を実行する'))
     .option('--plan <path>', 'plan コマンドが出力した計画JSON')
+    .option('--force', '確認プロンプトをスキップする')
     .action(async (opts) => {
       const options: CsvPilotOptions = buildOptions(opts);
 
@@ -175,6 +176,7 @@ export function buildOptions(opts: Record<string, unknown>): CsvPilotOptions {
     delimiter: resolved.delimiter,
     byok: config.byok,
     proxy: config.proxy,
+    force: Boolean(opts['force']),
   };
 }
 

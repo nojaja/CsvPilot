@@ -10,6 +10,15 @@ export interface CsvOutputWriter {
 }
 
 /**
+ * 出力先がファイルパスかどうかを判定する
+ * @param output -o オプションの値
+ * @returns 拡張子が含まれる場合 true（ファイルパス）、含まれない場合 false（ディレクトリ）
+ */
+export function isOutputFilePath(output: string): boolean {
+  return path.extname(output) !== '';
+}
+
+/**
  * 出力ファイルパスを生成する
  * @param outputDir 出力先ディレクトリ
  * @param csvBasename 入力CSVのファイル名（拡張子なし）

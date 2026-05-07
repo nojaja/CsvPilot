@@ -80,7 +80,7 @@ Commands:
 ```
   -p, --prompts <paths...>   プロンプト .md ファイルまたはフォルダ（複数指定可）
   -i, --input  <paths...>    入力 CSV ファイルまたはフォルダ（複数指定可）
-  -o, --output <dir>         出力先フォルダ
+  -o, --output <dir>         出力先フォルダまたは CSV ファイルパス（拡張子ありでファイルとみなす）
   -c, --config <path...>     設定ファイル（json/yaml、複数指定時は後勝ち）
   -q, --query  <query>       RBQL クエリ文字列（行フィルタリング用）
   -m, --mode   <mode>        セッションモード: whole | folder | file | record  (デフォルト: whole)
@@ -98,11 +98,30 @@ Commands:
 | `doctor`、`plan` | `--format <fmt>` | 出力フォーマット: `text`（デフォルト）または `json` |
 | `plan` | `--save-plan <path>` | JSON 計画をファイルに保存する |
 | `run` | `--plan <path>` | 保存済み計画 JSON ファイルを読み込む |
+| `run` | `--force` | プレミアムリクエスト消費の確認プロンプトをスキップする |
 | `verify` | `--actual <path>` | 実際の出力 CSV またはディレクトリのパス |
 | `verify` | `--spec <path>` | `verify.spec.yaml` のパス |
 | `verify` | `--format <fmt>` | 出力フォーマット: `text`（デフォルト）または `json` |
 | `init agent` | `--output <dir>` | 出力先ディレクトリ（デフォルト: `.csvpilot`） |
 | `init agent` | `--force` | 既存のテンプレートファイルを上書きする |
+
+### プレミアムリクエスト消費確認
+
+`run` コマンドは実行前にプレミアムリクエストの消費について警告を表示し、`yes` / `y` の入力を求めます。
+
+```
+[CsvPilot] ⚠️  Premium Request Consumption Notice
+  - Regardless of session mode, premium requests are consumed based on the number of records processed.
+  - Model multipliers are applied per mode
+    (e.g., Claude Opus 4.6 = ×3, Claude Sonnet 4.6 = ×1, GPT-4o = free)
+続行しますか？ [yes/no]:
+```
+
+AI エージェントや CI など対話的な入力が不要な場合は `--force` を付けてスキップできます。
+
+```bash
+csvpilot run --force -p sample/prompt -i sample/csv/reviews.csv -o sample/output
+```
 
 ### 認証
 
@@ -271,23 +290,43 @@ output:
 **実行:**
 
 ```bash
-csvpilot run\
+csvpilot run \
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output
 ```
 
-**出力** (`reviews__sentiment.csv`):
+**出力** (`sample/output/reviews__sentiment.csv`):
 
 ```
 id,product,reviewer,score,comment,sentiment,reason
 1,スマートフォンX,田中太郎,4,動作は速いが電池の持ちがやや短い,positive,動作速度への満足感が示されており全体的に肯定的な評価と判断できます。
 ```
 
+### 出力先に CSV ファイルパスを指定する
+
+`-o` にフォルダパスの代わりに拡張子付きのファイルパスを指定すると、すべての出力がそのファイルに統合されます。
+
+```bash
+# フォルダ指定（従来）→ sample/output/reviews__sentiment.csv が自動生成
+csvpilot run \
+  -p sample/prompt \
+  -i sample/csv/reviews.csv \
+  -o sample/output
+
+# ファイル指定（新機能）→ sample/output/result.csv に直接出力
+csvpilot run \
+  -p sample/prompt \
+  -i sample/csv/reviews.csv \
+  -o sample/output/result.csv
+```
+
+複数 CSV や複数プロンプトを処理する場合は、全入力ヘッダと全追加列のユニオンで1ファイルにまとめて書き込まれます。
+
 ### RBQL で行を絞り込んでから処理
 
 ```bash
-csvpilot run\
+csvpilot run \
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output \

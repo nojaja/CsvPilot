@@ -19,6 +19,7 @@ export interface CsvPilotOptions {
   delimiter: string;
   byok?: ByokConfig;
   proxy?: ProxyConfig;
+  force?: boolean;
 }
 
 /** BYOK設定 */

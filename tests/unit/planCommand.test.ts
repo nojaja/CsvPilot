@@ -72,4 +72,31 @@ describe('planCommand', () => {
     expect(plan.plannedOutputs.length).toBe(1);
     expect(plan.plannedOutputs[0].additionalColumns).toEqual(['sentiment']);
   });
+
+  it('-o がファイルパスの場合 plannedOutput.output が指定パスそのまま', async () => {
+    const promptPath = path.join(tmpDir, 'sentiment.record.prompt.md');
+    await fs.promises.writeFile(
+      promptPath,
+      [
+        '---',
+        'output:',
+        '  columns:',
+        '    - name: sentiment',
+        '      path: sentiment',
+        '      required: true',
+        '---',
+        'Analyze: {{comment}}',
+      ].join('\n')
+    );
+
+    const csvPath = path.join(tmpDir, 'data.csv');
+    await fs.promises.writeFile(csvPath, 'id,comment\n1,hello\n');
+
+    const outputFilePath = path.join(tmpDir, 'result.csv');
+    const options = { ...baseOptions(), output: outputFilePath };
+    const plan = await createExecutionPlan(options);
+
+    expect(plan.errors.length).toBe(0);
+    expect(plan.plannedOutputs[0].output).toBe(outputFilePath);
+  });
 });

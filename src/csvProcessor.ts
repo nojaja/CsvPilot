@@ -128,6 +128,28 @@ export async function loadCsvRecords(
 }
 
 /**
+ * CSVファイルの1行目（ヘッダ行）のみを読み込んで返す
+ * @param filePath 対象CSVファイルパス
+ * @param delimiter CSV区切り文字
+ * @returns ヘッダ列名配列
+ */
+export async function loadCsvHeaders(filePath: string, delimiter: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const headers: string[] = [];
+    const parser = parse({ delimiter, trim: true, to_line: 1 });
+
+    parser.on('data', (row: string[]) => {
+      headers.push(...row);
+    });
+
+    parser.on('end', () => resolve(headers));
+    parser.on('error', reject);
+
+    fs.createReadStream(filePath).pipe(parser);
+  });
+}
+
+/**
  * CSVファイルをストリーミングで1行ずつ処理する（RBQLなしの場合専用）
  * @param filePath 対象CSVファイルパス
  * @param delimiter CSV区切り文字

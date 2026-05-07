@@ -14,6 +14,7 @@ jest.mock('../../src/promptLoader', () => ({
 
 jest.mock('../../src/csvProcessor', () => ({
     loadCsvRecords: jest.fn(),
+    loadCsvHeaders: jest.fn(),
 }));
 
 jest.mock('../../src/templateRenderer', () => ({
@@ -23,6 +24,7 @@ jest.mock('../../src/templateRenderer', () => ({
 jest.mock('../../src/outputWriter', () => ({
     buildOutputPath: jest.fn(),
     createOutputWriter: jest.fn(),
+    isOutputFilePath: jest.fn(),
 }));
 
 jest.mock('../../src/responseParser', () => ({
@@ -41,9 +43,9 @@ jest.mock('../../src/sessionManager', () => ({
 
 import { resolvePromptFiles, resolveCsvFiles } from '../../src/fileResolver';
 import { loadPromptFiles, buildSystemMessage, getRecordPrompts } from '../../src/promptLoader';
-import { loadCsvRecords } from '../../src/csvProcessor';
+import { loadCsvRecords, loadCsvHeaders } from '../../src/csvProcessor';
 import { renderTemplate } from '../../src/templateRenderer';
-import { buildOutputPath, createOutputWriter } from '../../src/outputWriter';
+import { buildOutputPath, createOutputWriter, isOutputFilePath } from '../../src/outputWriter';
 import { parseJsonResponse, extractColumns, getOutputColumnNames } from '../../src/responseParser';
 import { startClient, createCopilotSession, sendPrompt, disconnectSession, stopClient } from '../../src/sessionManager';
 
@@ -53,9 +55,11 @@ const mockLoadPromptFiles = loadPromptFiles as jest.Mock;
 const mockBuildSystemMessage = buildSystemMessage as jest.Mock;
 const mockGetRecordPrompts = getRecordPrompts as jest.Mock;
 const mockLoadCsvRecords = loadCsvRecords as jest.Mock;
+const mockLoadCsvHeaders = loadCsvHeaders as jest.Mock;
 const mockRenderTemplate = renderTemplate as jest.Mock;
 const mockBuildOutputPath = buildOutputPath as jest.Mock;
 const mockCreateOutputWriter = createOutputWriter as jest.Mock;
+const mockIsOutputFilePath = isOutputFilePath as jest.Mock;
 const mockParseJsonResponse = parseJsonResponse as jest.Mock;
 const mockExtractColumns = extractColumns as jest.Mock;
 const mockGetOutputColumnNames = getOutputColumnNames as jest.Mock;
@@ -109,9 +113,11 @@ describe('orchestrator', () => {
             headers: ['id', 'comment'],
             records: [{ id: '1', comment: 'great' }],
         });
+        mockLoadCsvHeaders.mockResolvedValue(['id', 'comment']);
         mockRenderTemplate.mockReturnValue('Analyze: great');
         mockBuildOutputPath.mockReturnValue('/output/data__sentiment.csv');
         mockCreateOutputWriter.mockResolvedValue(mockWriter);
+        mockIsOutputFilePath.mockReturnValue(false);
         mockWriter.writeRow.mockResolvedValue(undefined);
         mockWriter.close.mockResolvedValue(undefined);
         mockSendPrompt.mockResolvedValue('{"sentiment": "positive"}');
@@ -169,6 +175,37 @@ describe('orchestrator', () => {
 
             await expect(run(baseOptions())).rejects.toThrow('output.columns');
             expect(mockStopClient).toHaveBeenCalled();
+        });
+
+        it('-o がファイルパスの場合 buildOutputPath を呼ばず createOutputWriter を1回だけ呼ぶ', async () => {
+            mockIsOutputFilePath.mockReturnValue(true);
+            const fileOptions = { ...baseOptions(), output: '/output/result.csv' };
+
+            await run(fileOptions);
+
+            expect(mockBuildOutputPath).not.toHaveBeenCalled();
+            expect(mockCreateOutputWriter).toHaveBeenCalledTimes(1);
+            expect(mockCreateOutputWriter).toHaveBeenCalledWith(
+                '/output/result.csv',
+                expect.any(Array),
+                expect.any(Array)
+            );
+        });
+
+        it('-o がファイルパスの場合 close が1回だけ呼ばれる', async () => {
+            mockIsOutputFilePath.mockReturnValue(true);
+            mockResolveCsvFiles.mockResolvedValue(['/input/a.csv', '/input/b.csv']);
+            mockLoadCsvHeaders.mockResolvedValue(['id', 'comment']);
+            mockLoadCsvRecords.mockResolvedValue({
+                headers: ['id', 'comment'],
+                records: [{ id: '1', comment: 'text' }],
+            });
+            const fileOptions = { ...baseOptions(), output: '/output/result.csv' };
+
+            await run(fileOptions);
+
+            expect(mockWriter.close).toHaveBeenCalledTimes(1);
+            expect(mockWriter.writeRow).toHaveBeenCalledTimes(2); // 2 CSV files x 1 record each
         });
     });
 });

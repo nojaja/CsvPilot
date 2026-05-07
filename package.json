@@ -1,6 +1,6 @@
 {
     "name": "csvpilot",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "type": "commonjs",
     "description": "CLI for batch CSV processing with GitHub Copilot SDK and reusable prompts",
     "main": "dist/csvpilot.bundle.js",

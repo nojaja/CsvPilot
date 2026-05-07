@@ -4,7 +4,7 @@ import { parse } from 'csv-parse/sync';
 import type { CsvPilotOptions, PromptFile } from './types';
 import { resolveCsvFiles, resolvePromptFiles } from './fileResolver';
 import { getRecordPrompts, loadPromptFiles } from './promptLoader';
-import { buildOutputPath } from './outputWriter';
+import { buildOutputPath, isOutputFilePath } from './outputWriter';
 import { getOutputColumnNames } from './responseParser';
 
 export interface PlanIssue {
@@ -120,10 +120,13 @@ function buildPlannedOutput(
   }
   const csvBasename = path.basename(csvPath, '.csv');
   const promptBasename = path.basename(prompt.path).replace('.record.prompt.md', '');
+  const outputPath = isOutputFilePath(outputDir)
+    ? outputDir
+    : buildOutputPath(outputDir, csvBasename, promptBasename);
   return {
     input: csvPath,
     prompt: prompt.path,
-    output: buildOutputPath(outputDir, csvBasename, promptBasename),
+    output: outputPath,
     additionalColumns: prompt.columns,
   };
 }

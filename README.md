@@ -80,7 +80,7 @@ Run `csvpilot <command> --help` for command-specific options.
 ```
   -p, --prompts <paths...>   Prompt .md file(s) or folder(s)
   -i, --input  <paths...>    Input CSV file(s) or folder(s)
-  -o, --output <dir>         Output directory
+  -o, --output <dir>         Output directory or CSV file path (treated as file when an extension is present)
   -c, --config <path...>     Config file(s): json/yaml (later files override earlier)
   -q, --query  <query>       RBQL query string for row filtering
   -m, --mode   <mode>        Session mode: whole | folder | file | record  (default: whole)
@@ -98,11 +98,30 @@ Run `csvpilot <command> --help` for command-specific options.
 | `doctor`, `plan` | `--format <fmt>` | Output format: `text` (default) or `json` |
 | `plan` | `--save-plan <path>` | Save the JSON plan to a file |
 | `run` | `--plan <path>` | Load a saved plan JSON file |
+| `run` | `--force` | Skip the premium request consumption confirmation prompt |
 | `verify` | `--actual <path>` | Path to the actual output CSV or directory |
 | `verify` | `--spec <path>` | Path to `verify.spec.yaml` |
 | `verify` | `--format <fmt>` | Output format: `text` (default) or `json` |
 | `init agent` | `--output <dir>` | Target directory (default: `.csvpilot`) |
 | `init agent` | `--force` | Overwrite existing template files |
+
+### Premium request consumption confirmation
+
+The `run` command displays a warning about premium request consumption before execution and prompts for `yes` / `y` confirmation:
+
+```
+[CsvPilot] ⚠️  Premium Request Consumption Notice
+  - Regardless of session mode, premium requests are consumed based on the number of records processed.
+  - Model multipliers are applied per mode
+    (e.g., Claude Opus 4.6 = ×3, Claude Sonnet 4.6 = ×1, GPT-4o = free)
+Continue? [yes/no]:
+```
+
+For non-interactive environments such as AI agents or CI, pass `--force` to skip the prompt:
+
+```bash
+csvpilot run --force -p sample/prompt -i sample/csv/reviews.csv -o sample/output
+```
 
 ### Authentication
 
@@ -272,23 +291,43 @@ Analyse the sentiment and return JSON:
 **Run:**
 
 ```bash
-csvpilot run\
+csvpilot run \
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output
 ```
 
-**Output** (`reviews__sentiment.csv`):
+**Output** (`sample/output/reviews__sentiment.csv`):
 
 ```
 id,product,reviewer,score,comment,sentiment,reason
 1,Smartphone X,Taro,4,Fast but short battery life,positive,The high rating and positive language indicate overall satisfaction.
 ```
 
+### Specify a CSV file path as output destination
+
+Passing an extension-bearing path to `-o` merges all output into that single file:
+
+```bash
+# Directory (existing behaviour) → generates sample/output/reviews__sentiment.csv automatically
+csvpilot run \
+  -p sample/prompt \
+  -i sample/csv/reviews.csv \
+  -o sample/output
+
+# File path (new) → writes directly to sample/output/result.csv
+csvpilot run \
+  -p sample/prompt \
+  -i sample/csv/reviews.csv \
+  -o sample/output/result.csv
+```
+
+When multiple CSV files or prompts are involved, all rows are written to the single file using the union of all input headers and additional columns.
+
 ### Filter rows with RBQL before processing
 
 ```bash
-csvpilot run\
+csvpilot run \
   -p sample/prompt \
   -i sample/csv/reviews.csv \
   -o sample/output \

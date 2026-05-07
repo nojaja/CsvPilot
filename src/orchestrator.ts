@@ -5,9 +5,9 @@ import type { ProviderConfig } from '@github/copilot-sdk';
 import type { CsvPilotOptions, CsvRecord, PromptFile, SessionMode } from './types';
 import { resolvePromptFiles, resolveCsvFiles } from './fileResolver';
 import { loadPromptFiles, buildSystemMessage, getRecordPrompts } from './promptLoader';
-import { loadCsvRecords } from './csvProcessor';
+import { loadCsvRecords, loadCsvHeaders } from './csvProcessor';
 import { renderTemplate } from './templateRenderer';
-import { buildOutputPath, createOutputWriter } from './outputWriter';
+import { buildOutputPath, createOutputWriter, isOutputFilePath } from './outputWriter';
 import type { CsvOutputWriter } from './outputWriter';
 import { parseJsonResponse, extractColumns, getOutputColumnNames } from './responseParser';
 import {
@@ -151,16 +151,25 @@ async function processOneCombo(
   options: CsvPilotOptions,
   client: CopilotClient,
   sharedSession: CopilotSession | null,
-  systemMessage: string
+  systemMessage: string,
+  sharedWriter?: CsvOutputWriter
 ): Promise<void> {
   const csvBasename = path.basename(csvPath, '.csv');
-  const outputPath = buildOutputPath(options.output, csvBasename, recordPrompt.basename);
   const { headers, records } = await loadCsvRecords(csvPath, options.delimiter, options.query);
 
   validateSchemaAgainstHeaders(recordPrompt, headers);
 
   const additionalColumns = getOutputColumnNames(recordPrompt.outputSchema!.columns);
-  const writer = await createOutputWriter(outputPath, headers, additionalColumns);
+
+  let writer: CsvOutputWriter;
+  let outputPath: string;
+  if (sharedWriter) {
+    writer = sharedWriter;
+    outputPath = options.output;
+  } else {
+    outputPath = buildOutputPath(options.output, csvBasename, recordPrompt.basename);
+    writer = await createOutputWriter(outputPath, headers, additionalColumns);
+  }
 
   if (sharedSession) {
     await processWithWholeSession(
@@ -180,8 +189,12 @@ async function processOneCombo(
     );
   }
 
-  await writer.close();
-  console.log(`[CsvPilot] 出力完了: ${outputPath} (${records.length}件)`);
+  if (!sharedWriter) {
+    await writer.close();
+    console.log(`[CsvPilot] 出力完了: ${outputPath} (${records.length}件)`);
+  } else {
+    console.log(`[CsvPilot] 書き込み完了: ${csvPath} / ${recordPrompt.basename} (${records.length}件)`);
+  }
 }
 
 /**
@@ -200,11 +213,12 @@ async function processWholeMode(
   options: CsvPilotOptions,
   client: CopilotClient,
   wholeSession: CopilotSession,
-  systemMessage: string
+  systemMessage: string,
+  sharedWriter?: CsvOutputWriter
 ): Promise<void> {
   for (const csvPath of csvPaths) {
     for (const recordPrompt of recordPrompts) {
-      await processOneCombo(csvPath, recordPrompt, options, client, wholeSession, systemMessage);
+      await processOneCombo(csvPath, recordPrompt, options, client, wholeSession, systemMessage, sharedWriter);
     }
   }
 }
@@ -223,11 +237,12 @@ async function processRecordMode(
   recordPrompts: PromptFile[],
   options: CsvPilotOptions,
   client: CopilotClient,
-  systemMessage: string
+  systemMessage: string,
+  sharedWriter?: CsvOutputWriter
 ): Promise<void> {
   for (const csvPath of csvPaths) {
     for (const recordPrompt of recordPrompts) {
-      await processOneCombo(csvPath, recordPrompt, options, client, null, systemMessage);
+      await processOneCombo(csvPath, recordPrompt, options, client, null, systemMessage, sharedWriter);
     }
   }
 }
@@ -246,7 +261,8 @@ async function processGroupedMode(
   recordPrompts: PromptFile[],
   options: CsvPilotOptions,
   client: CopilotClient,
-  systemMessage: string
+  systemMessage: string,
+  sharedWriter?: CsvOutputWriter
 ): Promise<void> {
   const sessionGroups = buildSessionGroups(csvPaths, options.mode);
   for (const groupedCsvPaths of sessionGroups.values()) {
@@ -259,7 +275,7 @@ async function processGroupedMode(
     try {
       for (const csvPath of groupedCsvPaths) {
         for (const recordPrompt of recordPrompts) {
-          await processOneCombo(csvPath, recordPrompt, options, client, session, systemMessage);
+          await processOneCombo(csvPath, recordPrompt, options, client, session, systemMessage, sharedWriter);
         }
       }
     } finally {
@@ -284,17 +300,18 @@ async function processAllCombos(
   options: CsvPilotOptions,
   client: CopilotClient,
   wholeSession: CopilotSession | null,
-  systemMessage: string
+  systemMessage: string,
+  sharedWriter?: CsvOutputWriter
 ): Promise<void> {
   if (options.mode === 'whole' && wholeSession) {
-    await processWholeMode(csvPaths, recordPrompts, options, client, wholeSession, systemMessage);
+    await processWholeMode(csvPaths, recordPrompts, options, client, wholeSession, systemMessage, sharedWriter);
     return;
   }
   if (options.mode === 'record') {
-    await processRecordMode(csvPaths, recordPrompts, options, client, systemMessage);
+    await processRecordMode(csvPaths, recordPrompts, options, client, systemMessage, sharedWriter);
     return;
   }
-  await processGroupedMode(csvPaths, recordPrompts, options, client, systemMessage);
+  await processGroupedMode(csvPaths, recordPrompts, options, client, systemMessage, sharedWriter);
 }
 
 /**
@@ -337,6 +354,50 @@ async function createWholeSessionIfNeeded(
 ): Promise<CopilotSession | null> {
   if (options.mode !== 'whole') return null;
   return createCopilotSession(client, systemMessage, options.model, options.byok?.provider);
+}
+
+/**
+ * ファイル出力モード用の共有ライターを作成する
+ * 全CSVのヘッダと全プロンプトの追加列のユニオンでライターを初期化する
+ * @param options 実行オプション
+ * @param csvPaths 入力CSVファイルパス配列
+ * @param recordPrompts recordプロンプトファイル配列
+ * @returns CsvOutputWriter インスタンス
+ */
+async function createSharedFileWriter(
+  options: CsvPilotOptions,
+  csvPaths: string[],
+  recordPrompts: PromptFile[]
+): Promise<CsvOutputWriter> {
+  const seenHeaders = new Set<string>();
+  const allInputHeaders: string[] = [];
+
+  for (const csvPath of csvPaths) {
+    const headers = await loadCsvHeaders(csvPath, options.delimiter);
+    for (const h of headers) {
+      if (!seenHeaders.has(h)) {
+        seenHeaders.add(h);
+        allInputHeaders.push(h);
+      }
+    }
+  }
+
+  const seenCols = new Set<string>();
+  const allAdditionalCols: string[] = [];
+
+  for (const rp of recordPrompts) {
+    if (rp.outputSchema) {
+      const cols = getOutputColumnNames(rp.outputSchema.columns);
+      for (const c of cols) {
+        if (!seenCols.has(c)) {
+          seenCols.add(c);
+          allAdditionalCols.push(c);
+        }
+      }
+    }
+  }
+
+  return createOutputWriter(options.output, allInputHeaders, allAdditionalCols);
 }
 
 /**
@@ -385,8 +446,17 @@ export async function run(options: CsvPilotOptions): Promise<void> {
   const client = await startClient(options);
   const wholeSession = await createWholeSessionIfNeeded(client, options, systemMessage);
 
+  let sharedWriter: CsvOutputWriter | undefined;
+  if (isOutputFilePath(options.output)) {
+    sharedWriter = await createSharedFileWriter(options, csvPaths, recordPrompts);
+  }
+
   try {
-    await processAllCombos(csvPaths, recordPrompts, options, client, wholeSession, systemMessage);
+    await processAllCombos(csvPaths, recordPrompts, options, client, wholeSession, systemMessage, sharedWriter);
+    if (sharedWriter) {
+      await sharedWriter.close();
+      console.log(`[CsvPilot] 出力完了: ${options.output}`);
+    }
   } finally {
     if (wholeSession) await disconnectSession(wholeSession);
     await stopClient(client);

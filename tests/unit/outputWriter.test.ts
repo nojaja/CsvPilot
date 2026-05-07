@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { buildOutputPath, createOutputWriter } from '../../src/outputWriter';
+import { buildOutputPath, createOutputWriter, isOutputFilePath } from '../../src/outputWriter';
 
 describe('outputWriter', () => {
   let tmpDir: string;
@@ -98,6 +98,28 @@ describe('outputWriter', () => {
       const content = await fs.promises.readFile(outputPath, 'utf-8');
       const lines = content.trim().split('\n');
       expect(lines.length).toBeGreaterThanOrEqual(3); // header + 2 rows
+    });
+  });
+
+  describe('isOutputFilePath', () => {
+    it('.csv で終わる場合は true を返す', () => {
+      expect(isOutputFilePath('output/result.csv')).toBe(true);
+    });
+
+    it('.tsv で終わる場合は true を返す', () => {
+      expect(isOutputFilePath('output/result.tsv')).toBe(true);
+    });
+
+    it('拡張子なしの場合は false を返す', () => {
+      expect(isOutputFilePath('output/folder')).toBe(false);
+    });
+
+    it('スラッシュで終わるフォルダパスは false を返す', () => {
+      expect(isOutputFilePath('output/')).toBe(false);
+    });
+
+    it('拡張子なしの相対パスは false を返す', () => {
+      expect(isOutputFilePath('output')).toBe(false);
     });
   });
 });
